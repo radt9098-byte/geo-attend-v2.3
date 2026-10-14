@@ -37,7 +37,7 @@ public final class OfflineAttendance {
  /** Send stable IDs; only remove after explicit server acknowledgement. */
  public void sync() throws Exception {
   JSONArray batch=new JSONArray();String account;
-  synchronized(LOCK){expire();JSONObject j=load();account=j.optString("account");JSONArray records=j.getJSONArray("records");for(int i=0;i<records.length()&&i<20;i++)batch.put(records.getJSONObject(i));}
+  synchronized(LOCK){expire();JSONObject j=load();account=j.optString("account");JSONArray records=j.getJSONArray("records");for(int i=0;i<records.length()&&i<5;i++)batch.put(records.getJSONObject(i));}
   if(batch.length()==0)return;
   JSONObject reply=Api.call(context,"syncOffline",Api.body("records",batch));JSONArray acknowledged=reply.getJSONArray("accepted");
   synchronized(LOCK){JSONObject j=load();if(!account.equals(j.optString("account")))return;JSONArray old=j.getJSONArray("records"),keep=new JSONArray();for(int i=0;i<old.length();i++){JSONObject r=old.getJSONObject(i);boolean done=false;for(int k=0;k<acknowledged.length();k++)if(r.getString("id").equals(acknowledged.getString(k)))done=true;if(!done)keep.put(r);}j.put("records",keep);save(j);}

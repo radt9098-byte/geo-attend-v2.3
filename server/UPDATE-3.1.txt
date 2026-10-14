@@ -1,0 +1,52 @@
+Geo Attend 3.1 — office upgrade
+
+IMPORTANT ORDER
+1. On EVERY existing employee app, reconnect to internet, pause tracking,
+   and confirm there are 0 pending offline records. Do this BEFORE the server update.
+2. Keep an attendance CSV or database backup privately for safety.
+3. Extract this ZIP on the Windows computer already signed in to Cloudflare.
+4. Do not run setup.cmd or migrate.mjs for this upgrade. Run update-3.1.cmd. Type SYNCED only after step 1 is complete. Wait for DONE.
+   If Cloudflare login is required, run npx wrangler login in CMD, then retry.
+5. The 3.1 APK uses a new private release signing key. Uninstall the old test-signed
+   app, then install GeoAttend-v3.1.apk. Cloud data remains; unsynced phone data does not.
+6. Admin logs in with the SAME existing ID/PIN. In Settings, create the recovery code
+   using the current admin PIN and save the displayed code privately outside the phone.
+7. Employees log in once to REQUEST phone approval. Admin opens Employees ->
+   Manage authorised phone, matches the model and eight-character code shown to
+   the employee, and approves the correct phone. Employee then logs in again.
+
+FEATURES
+- One approved tracking phone per employee, using an Android Keystore phone key.
+- Approving a replacement phone revokes old sessions and closes active attendance.
+- Admin can reset employee PINs; this revokes the employee's sessions but keeps history.
+- Admin recovery codes are random, stored as hashes, shown only when generated,
+  replaced after use, and protected by attempt limits. No paid SMS/email service.
+- Removing employees blocks access immediately. Their records are available for
+  30 days after removal, then hidden from app reports and removed by daily cleanup.
+- Previously removed employees get 30 days starting at this upgrade, because
+  the old system did not save their removal date. Cleanup deletes in bounded batches.
+- Active employee attendance has no automatic one-year deletion.
+
+FREE MANUAL BACKUPS
+Run backup.cmd when you want a backup. Choose a password of at least 12 characters.
+The encrypted .geobackup file is saved in the backups folder. Keep its password
+separately; a forgotten password cannot be recovered. No subscription is added.
+To decrypt your own backup for a restore:
+  node decrypt-backup.mjs "backups\YOUR-FILE.geobackup" "restored-backup.sql"
+Test restoring the SQL to a new empty D1 database before any production restore.
+The exported SQL includes the complete database, not only a CSV report.
+Old backup copies can still contain removed employees. The 30-day live-data rule
+cannot erase copies that you have downloaded elsewhere. Keep/delete copies privately.
+
+SIGNING KEY
+The private release .p12 key and its password are supplied separately from this ZIP.
+Keep both secure, offline backup copies. Never upload them to GitHub or share them.
+Future APK updates must use this same signing key. This key is different from the
+admin recovery code and the phone's non-exportable Android Keystore key.
+
+VALIDATION
+Local tests cover phone approval/revocation, stolen/replayed/tampered requests,
+PIN resets, one-use recovery, retention, repeatable migration, offline sync and
+backup encryption. Android builds and APK signatures are checked.
+Real-phone GPS, background tracking and the deployed upgrade still need testing.
+No APK or server update alone guarantees zero glitches.

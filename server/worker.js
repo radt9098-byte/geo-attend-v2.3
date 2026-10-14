@@ -21,6 +21,42 @@ const goodPin = (s) => typeof s === 'string' && /^\d{6,12}$/.test(s);
 const goodLogin = (s) => /^[a-z0-9][a-z0-9._-]{2,39}$/.test(s);
 function place(b) { return { name: clean(b.office, 100), lat: Number(b.lat), lon: Number(b.lon), radius: Number(b.radius) }; }
 function validPlace(p, b) { return p.name && b.lat !== '' && b.lon !== '' && Number.isFinite(p.lat) && Math.abs(p.lat) <= 90 && Number.isFinite(p.lon) && Math.abs(p.lon) <= 180 && Number.isInteger(p.radius) && p.radius >= 50 && p.radius <= 80; }
+function bytes64(s) { if (!/^[A-Za-z0-9+/=]{1,400}$/.test(s))
+    throw new Error('key'); return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+async function deviceIdentity(d) { const publicKey = clean(d?.key, 400), raw = bytes64(publicKey); if (raw.length < 80 || raw.length > 120)
+    throw new Error('key'); const key = await crypto.subtle.importKey('spki', raw, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']); const id = hex(await crypto.subtle.digest('SHA-256', raw)); if (d?.id !== id)
+    throw new Error('device'); return { id, key, publicKey, name: clean(d?.name, 60) || 'Android phone' }; }
+async function deviceProof(req, body, publicKey, db) { try {
+    const timestamp = req.headers.get('x-geo-time') || '', nonce = req.headers.get('x-geo-nonce') || '', signature = req.headers.get('x-geo-signature') || '';
+    if (!/^\d{13}$/.test(timestamp) || Math.abs(Date.now() - Number(timestamp)) > 300000 || !/^[-a-f0-9]{36}$/.test(nonce))
+        return false;
+    const raw = bytes64(publicKey), key = await crypto.subtle.importKey('spki', raw, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    const url = new URL(req.url);
+    const message = [req.method, url.pathname + url.search, timestamp, nonce, await digest(body)].join('\n');
+    const sig = bytes64(signature);
+    if (sig.length !== 64 || !await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, key, sig, encoder.encode(message)))
+        return false;
+    const result = await db.prepare('INSERT OR IGNORE INTO request_nonces(nonce,expires) VALUES(?,?)').bind(nonce, Date.now() + 600000).run();
+    return result.meta.changes === 1;
+}
+catch {
+    return false;
+} }
+export async function purgeRemoved(db, now = Date.now()) {
+    const cutoff = now - 2592000000;
+    for (let i = 0; i < 5; i++) {
+        const r = await db.prepare("DELETE FROM attendance WHERE id IN (SELECT t.id FROM attendance t JOIN removed_employees r ON r.account=t.account JOIN accounts a ON a.id=r.account WHERE a.active=0 AND a.role='employee' AND r.removed_at<=? LIMIT 1000)").bind(cutoff).run();
+        if (!r.meta.changes)
+            break;
+    }
+    const ready = await db.prepare("SELECT r.account FROM removed_employees r JOIN accounts a ON a.id=r.account WHERE a.active=0 AND a.role='employee' AND removed_at<=? AND NOT EXISTS (SELECT 1 FROM attendance WHERE account=r.account) LIMIT 5").bind(cutoff).all();
+    for (const r of ready.results) {
+        await db.batch([
+            db.prepare('DELETE FROM session_devices WHERE account=?').bind(r.account), db.prepare('DELETE FROM sessions WHERE account=?').bind(r.account), db.prepare('DELETE FROM devices WHERE account=?').bind(r.account), db.prepare('DELETE FROM admin_recovery WHERE account=?').bind(r.account), db.prepare('DELETE FROM accounts WHERE id=? AND active=0 AND role=\'employee\'').bind(r.account)
+        ]);
+    }
+    await db.batch([db.prepare('DELETE FROM request_nonces WHERE expires<?').bind(now), db.prepare('DELETE FROM sessions WHERE expires<?').bind(now), db.prepare('DELETE FROM login_attempts WHERE until<?').bind(now)]);
+}
 export async function handleGeo(req, native = false) {
     const binding = env.DB;
     if (!binding)
@@ -34,10 +70,11 @@ export async function handleGeo(req, native = false) {
     if (!native && req.method === 'POST' && req.headers.get('origin') !== new URL(req.url).origin)
         return fail('Invalid request origin.', 403);
     const url = new URL(req.url), action = url.searchParams.get('action') || 'status';
-    let b = {};
+    let b = {}, bodyText = '';
     if (req.method === 'POST') {
         try {
             const text = await req.text();
+            bodyText = text;
             if (text.length > 10000)
                 return fail('Request is too large.');
             b = JSON.parse(text);
@@ -47,15 +84,45 @@ export async function handleGeo(req, native = false) {
         }
     }
     let org = await db.prepare('SELECT * FROM organization WHERE id=1').first();
-    let account = null;
+    let account = null, sessionDevice = null;
     const token = native ? req.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1] : req.headers.get('cookie')?.match(/(?:^|;\s*)geo_session=([a-f0-9]{64})(?:;|$)/)?.[1];
     if (token) {
         account = await db.prepare('SELECT a.* FROM sessions s JOIN accounts a ON a.id=s.account WHERE s.token=? AND s.viewer=? AND s.expires>? AND a.active=1').bind(await digest(token), viewer, Date.now()).first();
         if (!native && account?.role === 'admin' && !webOwner(org))
             account = null;
+        if (native && account) {
+            sessionDevice = await db.prepare('SELECT d.* FROM session_devices sd JOIN devices d ON d.account=sd.account AND d.id=sd.device WHERE sd.token=? AND sd.account=?').bind(await digest(token), account.id).first();
+            if (!sessionDevice)
+                return fail('Version 3.1 requires a fresh login from this phone.', 401);
+            if (account.role === 'employee' && sessionDevice.state !== 'approved')
+                return fail('This phone is no longer authorised. Ask your admin.', 401);
+            if (req.headers.get('x-geo-device') !== sessionDevice.id || !await deviceProof(req, bodyText, sessionDevice.public_key, db))
+                return fail('Phone verification failed. Check automatic date/time and log in again.', 401);
+        }
     }
     if (action === 'status' && req.method === 'GET')
-        return out({ serverVersion: "2.4", setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
+        return out({ serverVersion: "3.1", setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login, recoveryReady: account.role === 'admin' ? !!await db.prepare('SELECT account FROM admin_recovery WHERE account=?').bind(account.id).first() : undefined } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
+    async function limited(key) { const now = Date.now(), a = await db.prepare('SELECT * FROM login_attempts WHERE key=?').bind(key).first(); if (a && a.until > now && a.failures >= 5)
+        return false; await db.prepare('INSERT INTO login_attempts(key,failures,until) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET failures=CASE WHEN until<? THEN 1 ELSE failures+1 END,until=CASE WHEN until<? THEN ? ELSE until END').bind(key, now + 600000, now, now, now + 600000).run(); return true; }
+    if (action === 'recoverAdmin' && req.method === 'POST') {
+        const login = clean(b.login, 40).toLowerCase();
+        if (!goodLogin(login) || !goodPin(b.pin) || !/^[-a-f0-9]{48,60}$/.test(clean(b.code, 70)))
+            return fail('Enter your admin ID, recovery code, and a new 6–12 digit PIN.');
+        const limitKey = await digest('recovery:' + login);
+        if (!await limited(limitKey))
+            return fail('Too many recovery attempts. Try again in 10 minutes.', 429);
+        const a = await db.prepare("SELECT a.*,r.hash AS recovery_hash FROM accounts a JOIN admin_recovery r ON r.account=a.id WHERE a.login=? AND a.role='admin' AND a.active=1").bind(login).first();
+        const supplied = await digest(clean(b.code, 70).replaceAll('-', ''));
+        if (!a || !equal(supplied, a.recovery_hash))
+            return fail('Recovery details are incorrect.', 401);
+        const salt = crypto.randomUUID(), hash = await pinHash(b.pin, salt), code = hex(crypto.getRandomValues(new Uint8Array(24)).buffer), newCodeHash = await digest(code), now = Date.now();
+        const result = await db.batch([
+            db.prepare('UPDATE accounts SET hash=?,salt=? WHERE id=? AND EXISTS (SELECT 1 FROM admin_recovery WHERE account=? AND hash=?)').bind(hash, salt, a.id, a.id, supplied), db.prepare('UPDATE admin_recovery SET hash=?,created=? WHERE account=? AND hash=?').bind(newCodeHash, now, a.id, supplied), db.prepare('DELETE FROM sessions WHERE account=? AND EXISTS (SELECT 1 FROM admin_recovery WHERE account=? AND hash=?)').bind(a.id, a.id, newCodeHash), db.prepare('DELETE FROM login_attempts WHERE key IN (?,?)').bind(limitKey, await digest('login:' + login))
+        ]);
+        if (!result[1].meta.changes)
+            return fail('This recovery code has already been used.', 409);
+        return out({ ok: true, recoveryCode: code });
+    }
     if (action === 'setup' && req.method === 'POST') {
         if (org)
             return fail('Admin setup is already complete.', 409);
@@ -64,14 +131,14 @@ export async function handleGeo(req, native = false) {
         const name = clean(b.name), login = clean(b.login, 40).toLowerCase(), p = place(b);
         if (!name || !goodLogin(login) || !goodPin(b.pin) || !validPlace(p, b))
             return fail('Enter a name, a valid login ID, a 6–12 digit PIN, and a workplace with a 50–80 m radius.');
-        const salt = crypto.randomUUID(), hash = await pinHash(b.pin, salt), id = crypto.randomUUID();
+        const salt = crypto.randomUUID(), hash = await pinHash(b.pin, salt), id = crypto.randomUUID(), recoveryCode = hex(crypto.getRandomValues(new Uint8Array(24)).buffer);
         try {
-            await db.batch([db.prepare('INSERT INTO organization(id,owner,name,lat,lon,radius) VALUES(1,?,?,?,?,?)').bind(viewer, p.name, p.lat, p.lon, p.radius), db.prepare('INSERT INTO accounts(id,name,login,hash,salt,role,created) VALUES(?,?,?,?,?,?,?)').bind(id, name, login, hash, salt, 'admin', Date.now())]);
+            await db.batch([db.prepare('INSERT INTO organization(id,owner,name,lat,lon,radius) VALUES(1,?,?,?,?,?)').bind(viewer, p.name, p.lat, p.lon, p.radius), db.prepare('INSERT INTO accounts(id,name,login,hash,salt,role,created) VALUES(?,?,?,?,?,?,?)').bind(id, name, login, hash, salt, 'admin', Date.now()), db.prepare('INSERT INTO admin_recovery(account,hash,created) VALUES(?,?,?)').bind(id, await digest(recoveryCode), Date.now())]);
         }
         catch {
             return fail('Admin setup was already completed. Please log in.', 409);
         }
-        return out({ ok: true });
+        return out({ ok: true, recoveryCode });
     }
     if (action === 'login' && req.method === 'POST') {
         const login = clean(b.login, 40).toLowerCase();
@@ -86,21 +153,84 @@ export async function handleGeo(req, native = false) {
         const actual = await pinHash(b.pin, a?.salt || 'invalid-credential');
         if (!a || !equal(actual, a.hash) || (!native && a.role === 'admin' && !webOwner(org)))
             return fail('Incorrect login ID or PIN.', 401);
+        let device;
+        try {
+            device = await deviceIdentity(b.device);
+        }
+        catch {
+            return fail('Install Geo Attend 3.1 and try again. Phone identity is missing.', 400);
+        }
+        if (req.headers.get('x-geo-device') !== device.id || !await deviceProof(req, bodyText, device.publicKey, db))
+            return fail('Phone verification failed. Check automatic date/time.', 401);
         await db.prepare('DELETE FROM login_attempts WHERE key=?').bind(key).run();
+        let registered = await db.prepare('SELECT * FROM devices WHERE account=? AND id=?').bind(a.id, device.id).first();
+        if (!registered) {
+            const count = await db.prepare("SELECT COUNT(*) AS n FROM devices WHERE account=? AND state='pending'").bind(a.id).first();
+            if (a.role === 'employee' && count.n >= 5)
+                return fail('Too many phone requests. Ask the admin to review them.', 429);
+            await db.prepare('INSERT OR IGNORE INTO devices(account,id,public_key,name,state,created) VALUES(?,?,?,?,?,?)').bind(a.id, device.id, device.publicKey, device.name, 'pending', now).run();
+            registered = await db.prepare('SELECT * FROM devices WHERE account=? AND id=?').bind(a.id, device.id).first();
+        }
+        if (registered.public_key !== device.publicKey)
+            return fail('Phone identity conflict.', 409);
+        if (a.role === 'employee' && registered.state !== 'approved')
+            return fail('Phone approval required. Ask the admin to approve ' + device.name + ' · ' + device.id.slice(0, 8) + '.', 403);
         const t = hex(crypto.getRandomValues(new Uint8Array(32)).buffer);
-        await db.batch([db.prepare('DELETE FROM sessions WHERE expires<?').bind(now), db.prepare('INSERT INTO sessions(token,account,viewer,expires) VALUES(?,?,?,?)').bind(await digest(t), a.id, viewer, now + (native ? 2592000000 : 43200000))]);
+        await db.batch([db.prepare('DELETE FROM sessions WHERE expires<?').bind(now), db.prepare('INSERT INTO sessions(token,account,viewer,expires) VALUES(?,?,?,?)').bind(await digest(t), a.id, viewer, now + (native ? 2592000000 : 43200000)), db.prepare('INSERT INTO session_devices(token,account,device) VALUES(?,?,?)').bind(await digest(t), a.id, device.id)]);
         return native ? out({ ok: true, token: t }) : out({ ok: true }, 200, cookie(t));
     }
     if (!account)
         return fail('Please log in to continue.', 401);
     const admin = account.role === 'admin';
     async function reconcile() { const now = Date.now(); await db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE accounts.id=attendance.account),start)),reason='tracking interrupted' WHERE end IS NULL AND account IN (SELECT id FROM accounts WHERE last_seen IS NULL OR last_seen<?)").bind(now - 90000).run(); }
+    if (action === 'createRecovery' && req.method === 'POST') {
+        if (!admin)
+            return fail('Admin access required.', 403);
+        if (!goodPin(b.pin) || !await limited(await digest('recovery-generate:' + account.id)))
+            return fail('Enter your current PIN or try again in 10 minutes.', 429);
+        if (!equal(await pinHash(b.pin, account.salt), account.hash))
+            return fail('Incorrect current PIN.', 403);
+        const code = hex(crypto.getRandomValues(new Uint8Array(24)).buffer);
+        await db.batch([db.prepare('INSERT INTO admin_recovery(account,hash,created) VALUES(?,?,?) ON CONFLICT(account) DO UPDATE SET hash=excluded.hash,created=excluded.created').bind(account.id, await digest(code), Date.now()), db.prepare('DELETE FROM login_attempts WHERE key=?').bind(await digest('recovery-generate:' + account.id))]);
+        return out({ recoveryCode: code });
+    }
+    if (action === 'resetPin' && req.method === 'POST') {
+        if (!admin)
+            return fail('Admin access required.', 403);
+        if (!goodPin(b.pin))
+            return fail('Use a 6–12 digit PIN.');
+        const target = await db.prepare("SELECT * FROM accounts WHERE id=? AND role='employee' AND active=1").bind(clean(b.id)).first();
+        if (!target)
+            return fail('Employee not found.', 404);
+        const salt = crypto.randomUUID();
+        await db.batch([db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)),reason='PIN reset' WHERE account=? AND end IS NULL").bind(target.id, target.id), db.prepare('UPDATE accounts SET hash=?,salt=?,last_seen=NULL,outside_since=NULL WHERE id=?').bind(await pinHash(b.pin, salt), salt, target.id), db.prepare('DELETE FROM sessions WHERE account=?').bind(target.id), db.prepare('DELETE FROM login_attempts WHERE key=?').bind(await digest('login:' + target.login))]);
+        return out({ ok: true });
+    }
+    if (action === 'devices' && req.method === 'GET') {
+        if (!admin)
+            return fail('Admin access required.', 403);
+        const target = clean(url.searchParams.get('employee'));
+        const devices = await db.prepare('SELECT id,name,state,created FROM devices WHERE account=? ORDER BY created DESC').bind(target).all();
+        return out({ devices: devices.results });
+    }
+    if (action === 'approveDevice' && req.method === 'POST') {
+        if (!admin)
+            return fail('Admin access required.', 403);
+        const target = clean(b.account), device = clean(b.device);
+        const selected = await db.prepare("SELECT d.id FROM devices d JOIN accounts a ON a.id=d.account WHERE d.account=? AND d.id=? AND a.active=1 AND a.role='employee'").bind(target, device).first();
+        if (!selected)
+            return fail('Phone request not found.', 404);
+        await db.batch([
+            db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)),reason='phone changed' WHERE account=? AND end IS NULL").bind(target, target), db.prepare("UPDATE devices SET state='revoked' WHERE account=?").bind(target), db.prepare("UPDATE devices SET state='approved' WHERE account=? AND id=?").bind(target, device), db.prepare('DELETE FROM sessions WHERE account=?').bind(target), db.prepare('UPDATE accounts SET last_seen=NULL,outside_since=NULL WHERE id=?').bind(target)
+        ]);
+        return out({ ok: true });
+    }
     if (action === 'backup' && req.method === 'GET') {
         if (!admin)
             return fail('Admin access required.', 403);
-        const tables = ['organization', 'accounts', 'attendance'];
+        const tables = ['organization', 'accounts', 'attendance', 'devices', 'admin_recovery', 'removed_employees'];
         const snapshots = await db.batch(tables.map(t => db.prepare('SELECT * FROM ' + t)));
-        return out({ schemaVersion: 1, exportedAt: Date.now(), tables: Object.fromEntries(tables.map((t, i) => [t, snapshots[i].results])) });
+        return out({ schemaVersion: 2, exportedAt: Date.now(), tables: Object.fromEntries(tables.map((t, i) => [t, snapshots[i].results])) });
     }
     if (action === 'pause' && req.method === 'POST') {
         if (admin)
@@ -146,14 +276,14 @@ export async function handleGeo(req, native = false) {
         const target = await db.prepare("SELECT id FROM accounts WHERE id=? AND role='employee' AND active=1").bind(clean(b.id)).first();
         if (!target)
             return fail('Employee not found.', 404);
-        await db.batch([db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),?)),reason='employee removed' WHERE account=? AND end IS NULL").bind(target.id, Date.now(), target.id), db.prepare('UPDATE accounts SET active=0 WHERE id=?').bind(target.id), db.prepare('DELETE FROM sessions WHERE account=?').bind(target.id)]);
+        await db.batch([db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),?)),reason='employee removed' WHERE account=? AND end IS NULL").bind(target.id, Date.now(), target.id), db.prepare('UPDATE accounts SET active=0 WHERE id=?').bind(target.id), db.prepare('INSERT INTO removed_employees(account,removed_at) VALUES(?,?) ON CONFLICT(account) DO NOTHING').bind(target.id, Date.now()), db.prepare('DELETE FROM sessions WHERE account=?').bind(target.id)]);
         return out({ ok: true });
     }
     if (action === 'syncOffline' && req.method === 'POST') {
         if (admin)
             return fail('Employee access required.', 403);
-        if (!Array.isArray(b.records) || b.records.length < 1 || b.records.length > 20)
-            return fail('Send 1–20 offline records.');
+        if (!Array.isArray(b.records) || b.records.length < 1 || b.records.length > 5)
+            return fail('Send 1–5 offline records.');
         const now = Date.now(), accepted = [];
         await reconcile();
         for (const r of b.records) {
@@ -211,13 +341,15 @@ export async function handleGeo(req, native = false) {
         if (target && !admin && target !== account.id)
             return fail('Access denied.', 403);
         const id = admin ? target : account.id;
-        const records = await (id ? db.prepare('SELECT t.*,a.name,a.login,a.active FROM attendance t JOIN accounts a ON a.id=t.account WHERE t.account=? ORDER BY t.start DESC').bind(id) : db.prepare('SELECT t.*,a.name,a.login,a.active FROM attendance t JOIN accounts a ON a.id=t.account ORDER BY t.start DESC')).all();
+        const cutoff = Date.now() - 2592000000;
+        const visible = '(a.active=1 OR EXISTS (SELECT 1 FROM removed_employees r WHERE r.account=a.id AND r.removed_at>?))';
+        const records = await (id ? db.prepare('SELECT t.*,a.name,a.login,a.active FROM attendance t JOIN accounts a ON a.id=t.account WHERE t.account=? AND ' + visible + ' ORDER BY t.start DESC').bind(id, cutoff) : db.prepare('SELECT t.*,a.name,a.login,a.active FROM attendance t JOIN accounts a ON a.id=t.account WHERE ' + visible + ' ORDER BY t.start DESC').bind(cutoff)).all();
         if (action === 'export') {
             const cell = (v) => '"' + String(v ?? '').replace(/^[\s]*[=+@-]/, "'").replace(/"/g, '""') + '"';
             const rows = [['Employee', 'Login ID', 'Check in (UTC)', 'Check out (UTC)', 'Minutes', 'End reason'], ...records.results.map((r) => [r.name, r.login, new Date(r.start).toISOString(), r.end ? new Date(r.end).toISOString() : '', Math.floor(((r.end || Date.now()) - r.start) / 60000), r.reason || 'in progress'])];
             return new Response(rows.map(r => r.map(cell).join(',')).join('\r\n'), { headers: { 'Content-Type': 'text/csv;charset=utf-8', 'Content-Disposition': 'attachment; filename="geo-attend.csv"', 'Cache-Control': 'no-store' } });
         }
-        const employees = admin ? (await db.prepare("SELECT id,name,login,role,active,last_seen,last_distance,accuracy FROM accounts WHERE role='employee' ORDER BY active DESC,name").all()).results : [{ id: account.id, name: account.name, login: account.login, active: account.active, last_seen: account.last_seen, last_distance: account.last_distance, accuracy: account.accuracy }];
+        const employees = admin ? (await db.prepare("SELECT a.id,a.name,a.login,a.role,a.active,a.last_seen,a.last_distance,a.accuracy,r.removed_at FROM accounts a LEFT JOIN removed_employees r ON r.account=a.id WHERE a.role='employee' AND (a.active=1 OR r.removed_at>?) ORDER BY a.active DESC,a.name").bind(cutoff).all()).results : [{ id: account.id, name: account.name, login: account.login, active: account.active, last_seen: account.last_seen, last_distance: account.last_distance, accuracy: account.accuracy }];
         return out({ records: records.results, employees, now: Date.now(), office: { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } });
     }
     return fail('Unknown action.', 404);
@@ -230,7 +362,7 @@ catch (e) {
     return fail('Could not complete the request. Please try again.', 500);
 } }
 export const POST = GET;
-export default { async fetch(request) { const url = new URL(request.url); if (url.pathname === '/api/native' && (request.method === 'GET' || request.method === 'POST')) {
+export default { async scheduled() { await purgeRemoved(env.DB); }, async fetch(request) { const url = new URL(request.url); if (url.pathname === '/api/native' && (request.method === 'GET' || request.method === 'POST')) {
         try {
             return await handleGeo(request, true);
         }

@@ -12,3 +12,9 @@ local.properties
 *.idsig
 migration-data.sql
 backups/
+
+*.p12
+*.pfx
+*.geobackup
+*Key-Password*
+restored-backup.sql

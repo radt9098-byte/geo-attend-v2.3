@@ -1,11 +1,11 @@
 {
   "name": "geo-attend-office-server",
-  "version": "2.4.0",
+  "version": "3.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "deploy": "npx --yes wrangler@4.150.0 deploy --config wrangler.jsonc",
-    "test": "node tests/offline-sync.mjs",
+    "test": "node tests/offline-sync.mjs && node tests/security-3.1.mjs && node tests/backup-crypto.mjs && node tests/migration-3.1.mjs",
     "build": "tsc worker.ts worker-env.d.ts --target es2022 --module esnext --moduleResolution bundler --skipLibCheck"
   },
   "devDependencies": {
