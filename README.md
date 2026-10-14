@@ -21,7 +21,7 @@ Employee data, database backups, migration SQL, tokens and signing keys are inte
 
 ## Version 2.4
 
-Both admin and employee screens have a persistent light/dark toggle. The workplace name is highlighted at the top of signed-in screens.
+Admin and employee Settings screens include the corresponding profile (name, login ID, role, workplace), a persistent dark-mode switch, and Log out. The workplace name is highlighted at the top of signed-in screens.
 
 Employees must sign in online at least once. With a cached workplace and encrypted session, the app can reopen offline, show cached history, and record reliable GPS attendance locally. Pending intervals are encrypted with Android Keystore. They sync in batches when the app or tracking service reconnects. No employee route coordinates are retained; the cached office coordinates are encrypted.
 
