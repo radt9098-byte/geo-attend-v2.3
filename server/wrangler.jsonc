@@ -1,0 +1,11 @@
+{
+  "name": "geo-attend-office",
+  "main": "worker.js",
+  "compatibility_date": "2026-05-15",
+  "workers_dev": true,
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "geo-attend-db",
+    "database_id": "623bb805-041f-4ad4-a913-e08bfd918abd"
+  }]
+}

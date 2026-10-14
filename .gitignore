@@ -1,0 +1,14 @@
+node_modules/
+.gradle/
+build/
+local.properties
+.env
+.env.*
+.dev.vars
+.wrangler/
+*.keystore
+*.jks
+*.apk
+*.idsig
+migration-data.sql
+backups/

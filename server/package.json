@@ -1,0 +1,7 @@
+{
+  "name": "geo-attend-office-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"deploy": "npx --yes wrangler@4.150.0 deploy --config wrangler.jsonc"}
+}
