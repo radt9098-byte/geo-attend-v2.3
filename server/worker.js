@@ -55,7 +55,7 @@ export async function handleGeo(req, native = false) {
             account = null;
     }
     if (action === 'status' && req.method === 'GET')
-        return out({ setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
+        return out({ serverVersion: "2.4", setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
     if (action === 'setup' && req.method === 'POST') {
         if (org)
             return fail('Admin setup is already complete.', 409);
@@ -148,6 +148,38 @@ export async function handleGeo(req, native = false) {
             return fail('Employee not found.', 404);
         await db.batch([db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),?)),reason='employee removed' WHERE account=? AND end IS NULL").bind(target.id, Date.now(), target.id), db.prepare('UPDATE accounts SET active=0 WHERE id=?').bind(target.id), db.prepare('DELETE FROM sessions WHERE account=?').bind(target.id)]);
         return out({ ok: true });
+    }
+    if (action === 'syncOffline' && req.method === 'POST') {
+        if (admin)
+            return fail('Employee access required.', 403);
+        if (!Array.isArray(b.records) || b.records.length < 1 || b.records.length > 20)
+            return fail('Send 1–20 offline records.');
+        const now = Date.now(), accepted = [];
+        await reconcile();
+        for (const r of b.records) {
+            const id = clean(r.id, 40), start = Number(r.start), end = Number(r.end), d = Number(r.distance), accuracy = Number(r.accuracy), o = r.office;
+            if (!/^[a-f0-9-]{36}$/.test(id) || r.account !== account.id || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end <= start || end - start > 43200000 || end > now + 60000 || start < now - 604800000 || !Number.isFinite(d) || d < 0 || !Number.isFinite(accuracy) || accuracy <= 0)
+                return fail('Offline record needs review: invalid time or location.', 409);
+            const existing = await db.prepare('SELECT * FROM attendance WHERE id=?').bind(id).first();
+            if (existing) {
+                if (existing.account !== account.id || existing.start !== start || existing.end !== end)
+                    return fail('Offline record ID conflict.', 409);
+                accepted.push(id);
+                continue;
+            }
+            if (!o || o.name !== org.name || o.lat !== org.lat || o.lon !== org.lon || o.radius !== org.radius || d + accuracy > org.radius)
+                return fail('Workplace changed. Offline attendance remains on the phone for review.', 409);
+            const writes = await db.batch([
+                db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)),reason='connection interrupted' WHERE account=? AND end IS NULL AND COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)<=?").bind(account.id, account.id, account.id, start),
+                db.prepare("INSERT INTO attendance(id,account,start,end,reason,distance) SELECT ?,?,?,?,'offline device record',? WHERE EXISTS (SELECT 1 FROM accounts WHERE id=? AND active=1) AND NOT EXISTS (SELECT 1 FROM attendance WHERE account=? AND start<? AND COALESCE(end,(SELECT last_seen FROM accounts WHERE id=?),start)>?)")
+                    .bind(id, account.id, start, end, d, account.id, account.id, end, account.id, start)
+            ]);
+            const result = writes[1];
+            if (!result.meta.changes)
+                return fail('Offline attendance overlaps another record. Kept on phone for review.', 409);
+            accepted.push(id);
+        }
+        return out({ accepted });
     }
     if (action === 'heartbeat' && req.method === 'POST') {
         if (admin)

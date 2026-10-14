@@ -1,0 +1,20 @@
+Geo Attend server update 2.4
+
+1. Extract the ZIP on your Windows computer.
+2. Open the extracted folder and run update-2.4.cmd.
+3. If asked to sign in to Cloudflare, run npx wrangler login in CMD,
+   then run update-2.4.cmd again.
+4. Wait for DONE before installing the 2.4 APK.
+
+This updates the existing geo-attend-office Worker in your Cloudflare account.
+Your D1 database, employee accounts and attendance are preserved.
+No schema migration is needed. Do not run the old setup/migration scripts.
+
+Employee offline use: log in online once, enable precise location and tracking,
+then turn off internet. Reliable GPS attendance is stored on the phone.
+Reconnect with the app or service running to upload pending records.
+The admin's offline dashboard is a cached snapshot, not live team status.
+
+Keep pending data on the phone until synced. Uninstalling/clearing app data
+will delete unsynced attendance. GPS accuracy and Android battery restrictions
+still affect tracking. Test with one employee phone before office-wide rollout.
