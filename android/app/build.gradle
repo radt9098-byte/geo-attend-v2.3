@@ -2,6 +2,6 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.geoattend.app'
     compileSdk 36
-    defaultConfig { applicationId 'com.geoattend.app'; minSdk 26; targetSdk 36; versionCode 8; versionName '2.4' }
+    defaultConfig { applicationId 'com.geoattend.app'; minSdk 26; targetSdk 36; versionCode 9; versionName '2.4.1' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
