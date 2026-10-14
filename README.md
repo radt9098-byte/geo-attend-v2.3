@@ -4,7 +4,7 @@ Private Android attendance app for an office, with a Cloudflare Worker API and D
 
 ## Project
 
-- `android/`: native Java app, version 2.4.8, Android 8.0 and newer. Open this folder in Android Studio with JDK 17 and SDK 36.
+- `android/`: native Java app, version 3.0, Android 8.0 and newer. Open this folder in Android Studio with JDK 17 and SDK 36.
 - `server/`: standalone Worker, schema, deployment and migration scripts, and a manual backup command.
 
 The app connects to the office-owned server at https://geo-attend-office.caresystemsandcontrols.workers.dev. Employee login uses IDs and PINs; credentials are hashed on the server and session tokens encrypted with Android Keystore. Foreground GPS attendance requires permission and a visible notification.
@@ -19,7 +19,7 @@ The existing office database has already been provisioned and accounts migrated.
 
 Employee data, database backups, migration SQL, tokens and signing keys are intentionally excluded. The office controls its Cloudflare account; this repository stores source code, not live attendance data.
 
-## Version 2.4.8
+## Version 3.0
 
 Admin and employee Settings screens include the corresponding profile (name, login ID, role, workplace), a persistent dark-mode switch, and Log out. The workplace name is highlighted at the top of signed-in screens.
 
@@ -44,3 +44,5 @@ Version 2.4.6 keeps only the Geo Attend header pinned; workplace and sync detail
 Version 2.4.7 joins the page and bottom navigation on one continuous background, without a floating outer capsule, shadow, or gap. Scrollbars and overscroll effects are hidden; swipe scrolling remains enabled.
 
 Version 2.4.8 overlays the floating capsule navigation on the scrolling page. Attendance auto-refresh updates records in place while preserving scroll and the selected employee filter; initial spinner selection no longer clears and reconstructs the list.
+
+Version 3.0 places the app logo followed by Geo Attend in a floating capsule at the top-left, over the scrolling page. The bottom capsule navigation is retained.
