@@ -1,0 +1,9 @@
+Geo Attend 3.3.2 — covered offline record fix
+
+1. Extract this ZIP on Windows. Open server/update-3.3.2.cmd and wait for DONE.
+2. Install GeoAttend-v3.3.2.apk over the existing app on both phones. Do not uninstall or clear data.
+3. Open the employee app with internet and tracking enabled. Wait up to a minute, or use Settings > Controls > Sync saved attendance.
+
+Fully covered offline intervals are acknowledged without adding duplicate time. Coverage is checked using exact timestamps for the same employee, including adjacent verified intervals. Partial overlaps or gaps stay on the phone for review. No server attendance is deleted or rewritten by this fix. The displayed Last server contact time is not a claim that all pending records have synced.
+
+Check the employee history: the old pending entry should disappear only if fully covered, server hours should not jump from duplicate time, and live tracking should continue. If it remains, preserve the phone data and share the warning.

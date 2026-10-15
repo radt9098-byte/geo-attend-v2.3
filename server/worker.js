@@ -102,7 +102,7 @@ export async function handleGeo(req, native = false) {
         }
     }
     if (action === 'status' && req.method === 'GET')
-        return out({ serverVersion: "3.1", releaseVersion: "3.3.1", pushEnabled: !!env.FCM_SERVICE_ACCOUNT, setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login, recoveryReady: account.role === 'admin' ? !!await db.prepare('SELECT account FROM admin_recovery WHERE account=?').bind(account.id).first() : undefined } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
+        return out({ serverVersion: "3.1", releaseVersion: "3.3.2", pushEnabled: !!env.FCM_SERVICE_ACCOUNT, setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login, recoveryReady: account.role === 'admin' ? !!await db.prepare('SELECT account FROM admin_recovery WHERE account=?').bind(account.id).first() : undefined } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
     async function limited(key) { const now = Date.now(), a = await db.prepare('SELECT * FROM login_attempts WHERE key=?').bind(key).first(); if (a && a.until > now && a.failures >= 5)
         return false; await db.prepare('INSERT INTO login_attempts(key,failures,until) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET failures=CASE WHEN until<? THEN 1 ELSE failures+1 END,until=CASE WHEN until<? THEN ? ELSE until END').bind(key, now + 600000, now, now, now + 600000).run(); return true; }
     if (action === 'recoverAdmin' && req.method === 'POST') {
@@ -352,6 +352,23 @@ export async function handleGeo(req, native = false) {
             }
             if (!o || o.name !== org.name || o.lat !== org.lat || o.lon !== org.lon || o.radius !== org.radius || d + accuracy > org.radius)
                 return fail('Workplace changed. Offline attendance remains on the phone for review.', 409);
+            // Acknowledge only when the entire interval is already represented by verified
+            // attendance for this employee. Merge adjacent/overlapping coverage, never gaps.
+            const coveredRows = await db.prepare("SELECT start,COALESCE(end,(SELECT last_seen FROM accounts WHERE id=?),start) AS covered_end FROM attendance WHERE account=? AND start<? ORDER BY start").bind(account.id, account.id, end).all();
+            let coveredUntil = start;
+            for (const row of coveredRows.results || []) {
+                if (row.covered_end <= coveredUntil)
+                    continue;
+                if (row.start > coveredUntil)
+                    break;
+                coveredUntil = Math.max(coveredUntil, row.covered_end);
+                if (coveredUntil >= end)
+                    break;
+            }
+            if (coveredUntil >= end) {
+                accepted.push(id);
+                continue;
+            }
             const writes = await db.batch([
                 db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)),reason='connection interrupted' WHERE account=? AND end IS NULL AND COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)<=?").bind(account.id, account.id, account.id, start),
                 db.prepare("INSERT INTO attendance(id,account,start,end,reason,distance) SELECT ?,?,?,?,'offline device record',? WHERE EXISTS (SELECT 1 FROM accounts WHERE id=? AND active=1) AND NOT EXISTS (SELECT 1 FROM attendance WHERE account=? AND start<? AND COALESCE(end,(SELECT last_seen FROM accounts WHERE id=?),start)>?)")
