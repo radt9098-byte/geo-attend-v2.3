@@ -48,3 +48,8 @@ Optional profile photos are selected with the Android document picker, sampled/c
 ### v3.3 notification build
 
 Adds Firebase Messaging for silent admin attendance alerts. The Windows `server/setup-notifications.cmd` applies the repeatable notification migration, imports a private local credential as a Cloudflare secret, and deploys the sender. Attendance and ID/PIN authentication remain in Cloudflare D1. The private server credential must never be committed or included in a GitHub release. See `server/NOTIFICATIONS.txt` for setup and phone verification. Other planned v3.3 UI changes remain pending.
+
+
+### v3.3.1 tracking reliability
+
+Separates live location requests from historical upload work, adds fused location with native fallback, and reports advisory employee tracking health without changing verified attendance rules. The repeatable Windows update uses the existing Worker and notification secret. Install the APK on both roles; see `server/TRACKING-3.3.1.txt` for verification.

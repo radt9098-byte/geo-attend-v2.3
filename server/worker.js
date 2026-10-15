@@ -102,7 +102,7 @@ export async function handleGeo(req, native = false) {
         }
     }
     if (action === 'status' && req.method === 'GET')
-        return out({ serverVersion: "3.1", releaseVersion: "3.3", pushEnabled: !!env.FCM_SERVICE_ACCOUNT, setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login, recoveryReady: account.role === 'admin' ? !!await db.prepare('SELECT account FROM admin_recovery WHERE account=?').bind(account.id).first() : undefined } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
+        return out({ serverVersion: "3.1", releaseVersion: "3.3.1", pushEnabled: !!env.FCM_SERVICE_ACCOUNT, setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login, recoveryReady: account.role === 'admin' ? !!await db.prepare('SELECT account FROM admin_recovery WHERE account=?').bind(account.id).first() : undefined } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
     async function limited(key) { const now = Date.now(), a = await db.prepare('SELECT * FROM login_attempts WHERE key=?').bind(key).first(); if (a && a.until > now && a.failures >= 5)
         return false; await db.prepare('INSERT INTO login_attempts(key,failures,until) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET failures=CASE WHEN until<? THEN 1 ELSE failures+1 END,until=CASE WHEN until<? THEN ? ELSE until END').bind(key, now + 600000, now, now, now + 600000).run(); return true; }
     if (action === 'recoverAdmin' && req.method === 'POST') {
@@ -183,6 +183,23 @@ export async function handleGeo(req, native = false) {
     if (!account)
         return fail('Please log in to continue.', 401);
     const admin = account.role === 'admin';
+    async function phoneHealth(state, age = null) {
+        const pending = Number.isSafeInteger(b.pending) && b.pending >= 0 && b.pending <= 2000 ? b.pending : 0;
+        await db.prepare('INSERT INTO employee_health(account,last_contact,state,fix_age,pending,battery_restricted) VALUES(?,?,?,?,?,?) ON CONFLICT(account) DO UPDATE SET last_contact=excluded.last_contact,state=excluded.state,fix_age=excluded.fix_age,pending=excluded.pending,battery_restricted=excluded.battery_restricted').bind(account.id, Date.now(), state, age, pending, b.batteryRestricted === true ? 1 : 0).run();
+    }
+    if (action === 'health' && req.method === 'POST') {
+        if (!native || admin)
+            return fail('Employee phone access required.', 403);
+        const allowed = ['finding', 'gps_off', 'permission_denied', 'stale_fix', 'sync_attention', 'mock_rejected', 'paused', 'service_error', 'stopped'];
+        if (!allowed.includes(b.state))
+            return fail('Invalid tracking health state.');
+        if (b.fixAge !== null && b.fixAge !== undefined && (!Number.isSafeInteger(b.fixAge) || b.fixAge < 0 || b.fixAge > 86400000))
+            return fail('Invalid location age.');
+        if (b.pending !== undefined && (!Number.isSafeInteger(b.pending) || b.pending < 0 || b.pending > 2000))
+            return fail('Invalid pending record count.');
+        await phoneHealth(b.state, b.fixAge ?? null);
+        return out({ ok: true, contactAt: Date.now() });
+    }
     if (action === 'registerPush' && req.method === 'POST') {
         if (!native || !admin || !sessionDevice || !token)
             return fail('Admin phone access required.', 403);
@@ -268,10 +285,13 @@ export async function handleGeo(req, native = false) {
     if (action === 'pause' && req.method === 'POST') {
         if (admin)
             return fail('Employee access required.', 403);
+        await phoneHealth('paused');
         await db.batch([db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)),reason='tracking paused' WHERE account=? AND end IS NULL").bind(account.id, account.id), db.prepare('UPDATE accounts SET last_seen=NULL,outside_since=NULL WHERE id=?').bind(account.id)]);
         return out({ ok: true });
     }
     if (action === 'logout' && req.method === 'POST') {
+        if (!admin)
+            await phoneHealth('stopped');
         if (!admin)
             await db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)),reason='logged out' WHERE account=? AND end IS NULL").bind(account.id, account.id).run();
         if (token)
@@ -352,6 +372,7 @@ export async function handleGeo(req, native = false) {
             return fail('A fresh GPS fix is required.');
         await reconcile();
         const now = Date.now(), d = distance(org.lat, org.lon, lat, lon), zone = classify(d, accuracy, org.radius);
+        await phoneHealth(zone, age);
         let open = await db.prepare('SELECT * FROM attendance WHERE account=? AND end IS NULL').bind(account.id).first();
         if (zone === 'inside') {
             await db.batch([db.prepare('UPDATE accounts SET last_seen=?,last_distance=?,accuracy=?,outside_since=NULL WHERE id=? AND active=1').bind(now, d, accuracy, account.id), db.prepare('INSERT INTO attendance(id,account,start,distance) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM accounts WHERE id=? AND active=1) AND NOT EXISTS (SELECT 1 FROM attendance WHERE account=? AND end IS NULL)').bind(crypto.randomUUID(), account.id, now, d, account.id, account.id)]);
@@ -376,13 +397,13 @@ export async function handleGeo(req, native = false) {
         const id = admin ? target : account.id;
         const cutoff = Date.now() - 2592000000;
         const visible = '(a.active=1 OR EXISTS (SELECT 1 FROM removed_employees r WHERE r.account=a.id AND r.removed_at>?))';
-        const records = await (id ? db.prepare('SELECT t.*,a.name,a.login,a.active FROM attendance t JOIN accounts a ON a.id=t.account WHERE t.account=? AND ' + visible + ' ORDER BY t.start DESC').bind(id, cutoff) : db.prepare('SELECT t.*,a.name,a.login,a.active FROM attendance t JOIN accounts a ON a.id=t.account WHERE ' + visible + ' ORDER BY t.start DESC').bind(cutoff)).all();
+        const records = await (id ? db.prepare('SELECT t.*,a.name,a.login,a.active,a.last_seen AS verified_end FROM attendance t JOIN accounts a ON a.id=t.account WHERE t.account=? AND ' + visible + ' ORDER BY t.start DESC').bind(id, cutoff) : db.prepare('SELECT t.*,a.name,a.login,a.active,a.last_seen AS verified_end FROM attendance t JOIN accounts a ON a.id=t.account WHERE ' + visible + ' ORDER BY t.start DESC').bind(cutoff)).all();
         if (action === 'export') {
             const cell = (v) => '"' + String(v ?? '').replace(/^[\s]*[=+@-]/, "'").replace(/"/g, '""') + '"';
-            const rows = [['Employee', 'Login ID', 'Check in (UTC)', 'Check out (UTC)', 'Minutes', 'End reason'], ...records.results.map((r) => [r.name, r.login, new Date(r.start).toISOString(), r.end ? new Date(r.end).toISOString() : '', Math.floor(((r.end || Date.now()) - r.start) / 60000), r.reason || 'in progress'])];
+            const rows = [['Employee', 'Login ID', 'Check in (UTC)', 'Check out (UTC)', 'Minutes', 'End reason'], ...records.results.map((r) => [r.name, r.login, new Date(r.start).toISOString(), r.end ? new Date(r.end).toISOString() : '', Math.floor(Math.max(0, ((r.end ?? r.verified_end ?? r.start) - r.start)) / 60000), r.reason || 'in progress'])];
             return new Response(rows.map(r => r.map(cell).join(',')).join('\r\n'), { headers: { 'Content-Type': 'text/csv;charset=utf-8', 'Content-Disposition': 'attachment; filename="geo-attend.csv"', 'Cache-Control': 'no-store' } });
         }
-        const employees = admin ? (await db.prepare("SELECT a.id,a.name,a.login,a.role,a.active,a.last_seen,a.last_distance,a.accuracy,r.removed_at FROM accounts a LEFT JOIN removed_employees r ON r.account=a.id WHERE a.role='employee' AND (a.active=1 OR r.removed_at>?) ORDER BY a.active DESC,a.name").bind(cutoff).all()).results : [{ id: account.id, name: account.name, login: account.login, active: account.active, last_seen: account.last_seen, last_distance: account.last_distance, accuracy: account.accuracy }];
+        const employees = admin ? (await db.prepare("SELECT a.id,a.name,a.login,a.role,a.active,a.last_seen,a.last_distance,a.accuracy,r.removed_at,h.last_contact,h.state AS tracking_health,h.fix_age,h.pending AS pending_records,h.battery_restricted FROM accounts a LEFT JOIN employee_health h ON h.account=a.id LEFT JOIN removed_employees r ON r.account=a.id WHERE a.role='employee' AND (a.active=1 OR r.removed_at>?) ORDER BY a.active DESC,a.name").bind(cutoff).all()).results : [{ id: account.id, name: account.name, login: account.login, active: account.active, last_seen: account.last_seen, last_distance: account.last_distance, accuracy: account.accuracy, ...(await db.prepare("SELECT last_contact,state AS tracking_health,fix_age,pending AS pending_records,battery_restricted FROM employee_health WHERE account=?").bind(account.id).first() || {}) }];
         return out({ records: records.results, employees, now: Date.now(), office: { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } });
     }
     return fail('Unknown action.', 404);

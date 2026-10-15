@@ -22,7 +22,7 @@ public final class OfflineAttendance {
  public String capture(double lat,double lon,double accuracy,long fixElapsed) throws Exception {synchronized(LOCK){
   JSONObject cached=new JSONObject(store.readPrivate("cachedStatus")),user=cached.getJSONObject("user"),office=cached.getJSONObject("office");
   JSONObject j=load();String account=user.getString("id");if(j.has("account")&&!account.equals(j.getString("account")))throw new IOException("Previous employee has pending attendance. Sync it first.");j.put("account",account);
-  long elapsed=fixElapsed,age=SystemClock.elapsedRealtime()-elapsed;if(age<0||age>60000)throw new IOException("Waiting for fresh GPS");long now=System.currentTimeMillis()-age;JSONObject open=j.optJSONObject("open");
+  long elapsed=fixElapsed,age=SystemClock.elapsedRealtime()-elapsed;if(age<0||age>60000)throw new IOException("Waiting for fresh GPS");long now=System.currentTimeMillis()+store.prefs().getLong("serverOffset",0)-age;JSONObject open=j.optJSONObject("open");
   if(open!=null&&(elapsed<open.optLong("elapsed")||elapsed-open.optLong("elapsed")>90000||Math.abs((now-open.optLong("last"))-(elapsed-open.optLong("elapsed")))>60000||!office.toString().equals(open.getJSONObject("office").toString())||now-open.optLong("start")>=43200000)){finish(j);open=null;}
   double d=distance(office.getDouble("lat"),office.getDouble("lon"),lat,lon);String state;
   if(d+accuracy<=office.getInt("radius")){

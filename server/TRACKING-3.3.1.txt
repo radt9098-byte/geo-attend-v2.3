@@ -1,0 +1,38 @@
+Geo Attend 3.3.1 - tracking reliability update
+
+Setup
+1. Extract the ZIP on your Windows computer.
+2. In server, double-click update-3.3.1.cmd and wait for DONE.
+3. Install GeoAttend-v3.3.1.apk over the existing app on BOTH admin and employee phones.
+   Do not uninstall or clear app data. Saved offline records are preserved.
+4. Open the employee app. In Settings > Controls, enable automatic attendance.
+5. Allow precise location. If Android restricts the app in the background, review
+   its battery settings using the existing Location & battery settings button.
+6. In admin > Employees, inspect Tracking health, Last phone contact and Last verified location.
+
+Changes
+- A rejected or slow historical offline upload no longer blocks current location updates.
+- Offline records needing review remain saved; they are not silently deleted.
+- Google fused high-accuracy location supplements native GPS/network providers.
+- Stale location subscriptions are renewed; mock and old fixes remain rejected.
+- Live location age is computed immediately before sending, not before other network work.
+- Phone health reports continue when location is off, uncertain, stale or missing.
+- A recent connection and a verified workplace location are displayed separately.
+- Health reporting never extends working hours without a verified inside/outside fix.
+- Admin status uses server-adjusted time to avoid false interruption due to clock differences.
+- Dashboard refreshes no longer block navigation taps; animations have a completion fallback.
+- Silent admin notifications remain included. No new Firebase credential setup is needed.
+
+Test on the affected employee phone
+- In the workplace, check employee Overview for a fresh fix and accuracy smaller than
+  the workplace zone. Check admin Employees for a recent phone contact and location status.
+- Turn location off while internet stays on: the admin should show GPS off after the
+  next health report, without adding unverified working time.
+- Turn location back on: wait for a fresh accurate fix and automatic check-in.
+- Lock the screen for several minutes and verify that updates continue.
+- If the admin shows No recent connection, it cannot tell whether the phone lost internet,
+  was force-stopped, or was restricted by Android. Use the last reported state and timestamps.
+
+Build, server security tests and blocked-upload concurrency tests pass. A physical-phone
+GPS and screen-off test is still necessary; app code cannot override Android force-stop.
+Appearance restoration and admin history charts from the broader v3.3 plan remain pending.

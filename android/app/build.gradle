@@ -3,11 +3,12 @@ android {
     namespace 'com.geoattend.app'
     compileSdk 36
     buildToolsVersion "36.0.0"
-    defaultConfig { applicationId 'com.geoattend.app'; minSdk 26; targetSdk 36; versionCode 20; versionName '3.3' }
+    defaultConfig { applicationId 'com.geoattend.app'; minSdk 26; targetSdk 36; versionCode 21; versionName '3.3.1' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 
 dependencies {
     implementation platform('com.google.firebase:firebase-bom:35.0.0')
     implementation 'com.google.firebase:firebase-messaging'
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
 }
