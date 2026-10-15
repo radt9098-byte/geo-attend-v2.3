@@ -1,0 +1,28 @@
+Geo Attend 3.4 — attendance reliability and readable CSV
+
+INSTALL
+1. Extract the ZIP on Windows. Open server/update-3.4.cmd and wait for DONE.
+2. Install GeoAttend-v3.4.apk over the existing app on BOTH admin and employee phones.
+3. Open the employee app, keep tracking enabled, and allow the saved records to sync.
+Do not uninstall, clear app data, reset the database, or repeat Firebase key setup.
+The same Worker, D1 database, office accounts, signing key and notification secret are used.
+
+CHANGES
+- Valid GPS evidence is saved locally independently of network requests.
+- Older provider callbacks cannot move the local GPS timeline backwards.
+- Successful live acknowledgement clears only evidence covered by that live session.
+- Offline import subtracts already-counted coverage and saves only missing portions.
+- Atomic retry receipts prevent duplicate time even if a successful response is lost.
+- A failed request says Connection retrying; cached dashboard data says Server unavailable.
+- A three-minute recovery hold replaces the old 90-second session timeout. Last verified time stays frozen while no verified fix arrives; expiry closes at the last verified time. An admin connectivity report alone never extends work time.
+- Android may restart a service killed for resources; deliberate pause stays paused.
+- GPS-off health contact also allows pending records to sync.
+- CSV uses separate IST dates and 12-hour AM/PM times, worked hours/minutes/seconds, status and explicit last verified time. UTC audit columns remain at the end.
+- Departure is filled only for confirmed location exits. A connection timeout is not a physical departure.
+- History timestamps include the date; recovered records have clearer labels.
+
+PHONE CHECK
+Use a single employee account on its approved phone. Check a normal 15-minute session, lock the screen, interrupt internet for several minutes while remaining inside the office with GPS active, reconnect, and compare daily total/history/CSV. Pending overlaps should clear without duplicate hours. Test an actual exit separately. Location permission and reliable location fixes remain necessary. Force-stop and phone power-off cannot record new GPS evidence.
+
+VALIDATION
+The source includes tests/reliability-3.4.mjs: a two-hour virtual shift, ten-minute outage, union of overlapping records, retry response loss, gap preservation, exact totals, IST midnight/AM-PM formatting, frozen time during lost GPS, repeatable migration. These are automated server simulations, not a two-hour physical-phone test. Android build/lint and existing security/push/backup tests are checked separately.

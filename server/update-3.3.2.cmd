@@ -4,7 +4,7 @@ cd /d "%~dp0"
 echo Geo Attend 3.3.2 - live tracking and employee health update
 call npx --yes wrangler@4.150.0 d1 execute geo-attend-db --remote --file migration-3.3.sql --yes --config wrangler.jsonc
 if errorlevel 1 goto failed
-call npx --yes wrangler@4.150.0 d1 execute geo-attend-db --remote --file migration-3.3.2.sql --yes --config wrangler.jsonc
+call npx --yes wrangler@4.150.0 d1 execute geo-attend-db --remote --file migration-3.3.1.sql --yes --config wrangler.jsonc
 if errorlevel 1 goto failed
 call npx --yes wrangler@4.150.0 deploy --config wrangler.jsonc
 if errorlevel 1 goto failed

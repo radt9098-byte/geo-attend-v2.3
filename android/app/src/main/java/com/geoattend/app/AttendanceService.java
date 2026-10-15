@@ -45,7 +45,7 @@ public final class AttendanceService extends Service implements LocationListener
    if(lock==null){lock=getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"GeoAttend:Attendance");lock.setReferenceCounted(false);lock.acquire(60000);}
    requestProviders();state(locationEnabled()?"Finding your location":"GPS off — turn on device location",0,0);handler.removeCallbacks(tick);handler.post(tick);
   }catch(Exception e){state("Cannot start tracking. Open Controls and check permissions.",0,0);store.prefs().edit().putBoolean("trackingWanted",false).apply();stopSelf();}
-  return START_NOT_STICKY;
+  return START_STICKY;
  }
  private void requestProviders(){
   lastProviderRequest=SystemClock.elapsedRealtime();
@@ -62,8 +62,9 @@ public final class AttendanceService extends Service implements LocationListener
   if(stopping)return;boolean mock=Build.VERSION.SDK_INT>=31?location.isMock():location.isFromMockProvider();
   if(mock){latest=null;mockRejected=true;state("Mock location rejected",0,0);sendLocation();return;}
   if(!location.hasAccuracy()||location.getAccuracy()<=0||fixAge(location)<0||fixAge(location)>30000)return;
+  if(latest!=null&&location.getElapsedRealtimeNanos()<=latest.getElapsedRealtimeNanos())return;
   mockRejected=false;
-  if(latest==null||fixAge(latest)>15000||location.getAccuracy()<=latest.getAccuracy()*1.5f){latest=new Location(location);store.prefs().edit().putLong("fixAt",System.currentTimeMillis()-fixAge(location)).apply();}
+  if(latest==null||fixAge(latest)>15000||location.getAccuracy()<=latest.getAccuracy()*1.5f){latest=new Location(location);try{new OfflineAttendance(this).capture(location.getLatitude(),location.getLongitude(),location.getAccuracy(),location.getElapsedRealtimeNanos()/1000000);}catch(Exception e){store.prefs().edit().putString("syncIssue","Could not save location evidence: "+e.getMessage()).apply();}store.prefs().edit().putLong("fixAt",System.currentTimeMillis()-fixAge(location)).apply();}
   sendLocation();
  }
  private JSONObject healthBody(String state)throws Exception {Location l=latest;return Api.body("state",state,"fixAge",l==null?JSONObject.NULL:Math.min(86400000,Math.max(0,fixAge(l))),"pending",Math.min(2000,new OfflineAttendance(this).pendingCount()),"batteryRestricted",restricted());}
@@ -79,16 +80,17 @@ public final class AttendanceService extends Service implements LocationListener
   work.live(()->{
    try{
     if(stopping||!session.equals(store.token()))return;
-    if(location==null){Api.call(this,"health",healthBody(missing));store.prefs().edit().putLong("lastContactAt",System.currentTimeMillis()).apply();return;}
+    if(location==null){Api.call(this,"health",healthBody(missing));store.prefs().edit().putLong("lastContactAt",System.currentTimeMillis()).putBoolean("connectionRetrying",false).apply();handler.post(()->syncHistory(session));return;}
     long age=fixAge(location);if(age<0||age>30000){handler.post(()->{if(!stopping)state("Waiting for fresh GPS",0,0);});return;}
     JSONObject body=Api.body("lat",location.getLatitude(),"lon",location.getLongitude(),"accuracy",location.getAccuracy(),"age",age,"pending",Math.min(2000,new OfflineAttendance(this).pendingCount()),"batteryRestricted",restricted());
     JSONObject r=Api.call(this,"heartbeat",body);
-    if(!stopping&&session.equals(store.token()))handler.post(()->{if(stopping)return;store.prefs().edit().putLong("lastContactAt",System.currentTimeMillis()).apply();state(r.optString("state","Connected"),r.optInt("distance"),r.optInt("accuracy"));syncHistory(session);});
+    if("checked in".equals(r.optString("state")))new OfflineAttendance(this).confirmLive(r.optLong("sessionStart"),r.optLong("verifiedAt"));
+    if(!stopping&&session.equals(store.token()))handler.post(()->{if(stopping)return;store.prefs().edit().putLong("lastContactAt",System.currentTimeMillis()).putBoolean("connectionRetrying",false).apply();state(r.optString("state","Connected"),r.optInt("distance"),r.optInt("accuracy"));syncHistory(session);});
    }catch(Exception e){handler.post(()->{
     if(stopping||!session.equals(store.token()))return;
     if(e instanceof Api.Failure&&((Api.Failure)e).code==401){store.clear();state("Session expired. Please log in again.",0,0);stopSelf();}
     else if(e instanceof Api.Failure&&((Api.Failure)e).code<500){state("Location update needs attention: "+e.getMessage(),0,0);}
-    else if(location!=null)try{String local=new OfflineAttendance(this).capture(location.getLatitude(),location.getLongitude(),location.getAccuracy(),location.getElapsedRealtimeNanos()/1000000);state(local,store.prefs().getInt("distance",0),store.prefs().getInt("accuracy",0));}catch(Exception save){state("Cannot save offline attendance: "+save.getMessage(),0,0);}
+    else if(location!=null)try{store.prefs().edit().putBoolean("connectionRetrying",true).apply();state("Connection retrying · location saved on phone",store.prefs().getInt("distance",0),store.prefs().getInt("accuracy",0));}catch(Exception save){state("Cannot save offline attendance: "+save.getMessage(),0,0);}
     else state(healthLabel(missing)+" · server connection unavailable",0,0);
    });}finally{handler.post(()->sending=false);}
   });

@@ -53,3 +53,7 @@ Adds Firebase Messaging for silent admin attendance alerts. The Windows `server/
 ### v3.3.1 tracking reliability
 
 Separates live location requests from historical upload work, adds fused location with native fallback, and reports advisory employee tracking health without changing verified attendance rules. The repeatable Windows update uses the existing Worker and notification secret. Install the APK on both roles; see `server/TRACKING-3.3.1.txt` for verification.
+
+
+## Version 3.4
+Attendance recovery now subtracts overlaps transactionally and uses stable retry receipts. GPS evidence is saved independently of HTTP uploads. CSV exports include readable IST dates and AM/PM times, worked duration, confirmed departure versus last verified time, and UTC reference columns. Run `server/update-3.4.cmd`, then install the signed v3.4 APK over the existing app. See `server/UPDATE-3.4.txt` for verification steps.

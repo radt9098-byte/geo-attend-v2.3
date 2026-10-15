@@ -13,9 +13,9 @@ public final class OfflineAttendance {
  public OfflineAttendance(Context c){context=c.getApplicationContext();store=new SessionStore(context);}
  private JSONObject load() throws JSONException {String raw=store.readPrivate("offlineAttendance");return raw.isEmpty()?new JSONObject().put("records",new JSONArray()):new JSONObject(raw);}
  private void save(JSONObject j) throws Exception {store.savePrivate("offlineAttendance",j.toString());}
- public JSONArray pendingRecords(){synchronized(LOCK){try{expire();JSONObject j=load();JSONArray list=new JSONArray(j.getJSONArray("records").toString());JSONObject open=j.optJSONObject("open");if(open!=null)list.put(new JSONObject(open.toString()).put("end",open.optLong("last")));return list;}catch(Exception e){return new JSONArray();}}}
+ public JSONArray pendingRecords(){synchronized(LOCK){try{expire();JSONObject j=load();JSONArray list=new JSONArray(j.getJSONArray("records").toString());JSONObject open=j.optJSONObject("open");if(open!=null&&(store.prefs().getBoolean("connectionRetrying",false)||!AttendanceService.running))list.put(new JSONObject(open.toString()).put("end",open.optLong("last")));return list;}catch(Exception e){return new JSONArray();}}}
  public long todayMillis(){JSONArray list=pendingRecords();java.util.Calendar c=java.util.Calendar.getInstance();c.set(java.util.Calendar.HOUR_OF_DAY,0);c.set(java.util.Calendar.MINUTE,0);c.set(java.util.Calendar.SECOND,0);c.set(java.util.Calendar.MILLISECOND,0);long total=0;for(int i=0;i<list.length();i++){JSONObject r=list.optJSONObject(i);total+=Math.max(0,r.optLong("end")-Math.max(c.getTimeInMillis(),r.optLong("start")));}return total;}
- public int pendingCount(){synchronized(LOCK){try{JSONObject j=load();return j.getJSONArray("records").length()+(j.has("open")?1:0);}catch(Exception e){return 0;}}}
+ public int pendingCount(){synchronized(LOCK){try{JSONObject j=load();return j.getJSONArray("records").length()+(j.has("open")&&(store.prefs().getBoolean("connectionRetrying",false)||!AttendanceService.running)?1:0);}catch(Exception e){return 0;}}}
  private void finish(JSONObject j) throws JSONException {JSONObject open=j.optJSONObject("open");if(open!=null){open.put("end",open.getLong("last"));if(open.getLong("end")>open.getLong("start"))j.getJSONArray("records").put(open);j.remove("open");}j.remove("outsideAt");}
  public void finish(){synchronized(LOCK){try{JSONObject j=load();finish(j);save(j);}catch(Exception e){store.prefs().edit().putString("trackingStatus","Could not save offline attendance").apply();}}}
  public void expire(){synchronized(LOCK){try{JSONObject j=load();JSONObject open=j.optJSONObject("open");if(open!=null&&(SystemClock.elapsedRealtime()<open.optLong("elapsed")||SystemClock.elapsedRealtime()-open.optLong("elapsed")>90000)){finish(j);save(j);}}catch(Exception ignored){}}}
@@ -33,6 +33,8 @@ public final class OfflineAttendance {
   }else{j.remove("outsideAt");state="Offline · GPS uncertain";}
   save(j);store.prefs().edit().putInt("distance",(int)Math.round(d)).putInt("accuracy",(int)Math.round(accuracy)).apply();return state;
  }}
+ /** Remove only the currently buffered interval explicitly covered by this live session. */
+ public void confirmLive(long sessionStart,long verifiedAt)throws Exception {synchronized(LOCK){JSONObject j=load();JSONObject o=j.optJSONObject("open");if(o!=null&&sessionStart>0&&o.optLong("start")>=sessionStart&&o.optLong("last")<=verifiedAt){j.remove("open");j.remove("outsideAt");save(j);}}}
  public void connected() throws Exception {synchronized(LOCK){JSONObject j=load();finish(j);save(j);}}
  /** Send stable IDs; only remove after explicit server acknowledgement. */
  public void sync() throws Exception {

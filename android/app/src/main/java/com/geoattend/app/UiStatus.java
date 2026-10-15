@@ -3,10 +3,11 @@ import java.util.Locale;
 /** Display state only; attendance decisions remain in the tracking service/server. */
 public final class UiStatus {
  public static String label(boolean running,boolean offline,boolean working,long age,String status){
-  if(offline)return "Offline · pending sync";
+  if(offline)return "Server unavailable · saved attendance";
   if(!running)return "Tracking paused";
   String s=status.toLowerCase(Locale.ROOT);
   if(age>45000)return "Waiting for fresh GPS";
+  if(s.contains("retrying"))return "Connection retrying · saved on phone";
   if(s.contains("attention"))return "Sync needs attention";
   if(s.contains("mock")||s.contains("rejected"))return "Location rejected";
   if(s.contains("disabled")||s.contains("turn on")||s.contains("permission")||s.contains("cannot"))return "Location unavailable";

@@ -102,7 +102,7 @@ export async function handleGeo(req, native = false) {
         }
     }
     if (action === 'status' && req.method === 'GET')
-        return out({ serverVersion: "3.1", releaseVersion: "3.3.2", pushEnabled: !!env.FCM_SERVICE_ACCOUNT, setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login, recoveryReady: account.role === 'admin' ? !!await db.prepare('SELECT account FROM admin_recovery WHERE account=?').bind(account.id).first() : undefined } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
+        return out({ serverVersion: "3.1", releaseVersion: "3.4", pushEnabled: !!env.FCM_SERVICE_ACCOUNT, setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login, recoveryReady: account.role === 'admin' ? !!await db.prepare('SELECT account FROM admin_recovery WHERE account=?').bind(account.id).first() : undefined } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
     async function limited(key) { const now = Date.now(), a = await db.prepare('SELECT * FROM login_attempts WHERE key=?').bind(key).first(); if (a && a.until > now && a.failures >= 5)
         return false; await db.prepare('INSERT INTO login_attempts(key,failures,until) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET failures=CASE WHEN until<? THEN 1 ELSE failures+1 END,until=CASE WHEN until<? THEN ? ELSE until END').bind(key, now + 600000, now, now, now + 600000).run(); return true; }
     if (action === 'recoverAdmin' && req.method === 'POST') {
@@ -232,7 +232,7 @@ export async function handleGeo(req, native = false) {
         await db.batch([db.prepare("INSERT INTO push_events(id,employee,name,kind,at,reason,created) VALUES(?,?,?,'in',?,'notification test',?)").bind(id, account.id, 'Geo Attend', now, now), db.prepare('INSERT INTO push_deliveries(event,registration,session,recipient,next_at) SELECT ?,id,session,account,? FROM push_registrations WHERE session=?').bind(id, now, session)]);
         return out({ ok: true, message: 'Test queued. Keep notifications allowed on this phone.' });
     }
-    async function reconcile() { const now = Date.now(); await db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE accounts.id=attendance.account),start)),reason='tracking interrupted' WHERE end IS NULL AND account IN (SELECT id FROM accounts WHERE last_seen IS NULL OR last_seen<?)").bind(now - 90000).run(); }
+    async function reconcile() { const now = Date.now(); await db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE accounts.id=attendance.account),start)),reason='tracking interrupted' WHERE end IS NULL AND account IN (SELECT id FROM accounts WHERE last_seen IS NULL OR last_seen<?)").bind(now - 180000).run(); }
     if (action === 'createRecovery' && req.method === 'POST') {
         if (!admin)
             return fail('Admin access required.', 403);
@@ -352,31 +352,25 @@ export async function handleGeo(req, native = false) {
             }
             if (!o || o.name !== org.name || o.lat !== org.lat || o.lon !== org.lon || o.radius !== org.radius || d + accuracy > org.radius)
                 return fail('Workplace changed. Offline attendance remains on the phone for review.', 409);
-            // Acknowledge only when the entire interval is already represented by verified
-            // attendance for this employee. Merge adjacent/overlapping coverage, never gaps.
-            const coveredRows = await db.prepare("SELECT start,COALESCE(end,(SELECT last_seen FROM accounts WHERE id=?),start) AS covered_end FROM attendance WHERE account=? AND start<? ORDER BY start").bind(account.id, account.id, end).all();
-            let coveredUntil = start;
-            for (const row of coveredRows.results || []) {
-                if (row.covered_end <= coveredUntil)
-                    continue;
-                if (row.start > coveredUntil)
-                    break;
-                coveredUntil = Math.max(coveredUntil, row.covered_end);
-                if (coveredUntil >= end)
-                    break;
-            }
-            if (coveredUntil >= end) {
+            const receipt = await db.prepare('SELECT account,start,end FROM offline_receipts WHERE id=?').bind(id).first();
+            if (receipt) {
+                if (receipt.account !== account.id || receipt.start !== start || receipt.end !== end)
+                    return fail('Offline record ID conflict.', 409);
                 accepted.push(id);
                 continue;
             }
-            const writes = await db.batch([
-                db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)),reason='connection interrupted' WHERE account=? AND end IS NULL AND COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)<=?").bind(account.id, account.id, account.id, start),
-                db.prepare("INSERT INTO attendance(id,account,start,end,reason,distance) SELECT ?,?,?,?,'offline device record',? WHERE EXISTS (SELECT 1 FROM accounts WHERE id=? AND active=1) AND NOT EXISTS (SELECT 1 FROM attendance WHERE account=? AND start<? AND COALESCE(end,(SELECT last_seen FROM accounts WHERE id=?),start)>?)")
-                    .bind(id, account.id, start, end, d, account.id, account.id, end, account.id, start)
+            // One transaction closes only an open interval ending before this evidence,
+            // subtracts all existing coverage, and stores a retry receipt. No read/write race.
+            const coverage = "COALESCE(t.end,(SELECT last_seen FROM accounts WHERE id=t.account),t.start)";
+            const bounds = `SELECT MAX(t.start,?) FROM attendance t WHERE t.account=? AND t.start<? AND ${coverage}>? UNION SELECT MIN(${coverage},?) FROM attendance t WHERE t.account=? AND t.start<? AND ${coverage}>?`;
+            await db.batch([
+                db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)),reason='connection interrupted' WHERE account=? AND end IS NULL AND COALESCE((SELECT last_seen FROM accounts WHERE id=?),start)<? AND NOT EXISTS (SELECT 1 FROM offline_receipts WHERE id=?)").bind(account.id, account.id, account.id, end, id),
+                db.prepare(`INSERT INTO attendance(id,account,start,end,reason,distance) WITH boundaries(v) AS (SELECT ? UNION SELECT ? UNION ${bounds}), parts AS (SELECT v AS s,LEAD(v) OVER (ORDER BY v) AS e FROM boundaries) SELECT ?||':'||s,?,s,e,'offline device record',? FROM parts WHERE e>s AND EXISTS (SELECT 1 FROM accounts WHERE id=? AND active=1) AND NOT EXISTS (SELECT 1 FROM attendance t WHERE t.account=? AND t.start<e AND ${coverage}>s) AND NOT EXISTS (SELECT 1 FROM offline_receipts WHERE id=?)`).bind(start, end, start, account.id, end, start, end, account.id, end, start, id, account.id, d, account.id, account.id, id),
+                db.prepare('INSERT OR IGNORE INTO offline_receipts(id,account,start,end,created) VALUES(?,?,?,?,?)').bind(id, account.id, start, end, now)
             ]);
-            const result = writes[1];
-            if (!result.meta.changes)
-                return fail('Offline attendance overlaps another record. Kept on phone for review.', 409);
+            const confirmed = await db.prepare('SELECT account,start,end FROM offline_receipts WHERE id=?').bind(id).first();
+            if (!confirmed || confirmed.account !== account.id || confirmed.start !== start || confirmed.end !== end)
+                return fail('Offline record ID conflict.', 409);
             accepted.push(id);
         }
         return out({ accepted });
@@ -393,7 +387,7 @@ export async function handleGeo(req, native = false) {
         let open = await db.prepare('SELECT * FROM attendance WHERE account=? AND end IS NULL').bind(account.id).first();
         if (zone === 'inside') {
             await db.batch([db.prepare('UPDATE accounts SET last_seen=?,last_distance=?,accuracy=?,outside_since=NULL WHERE id=? AND active=1').bind(now, d, accuracy, account.id), db.prepare('INSERT INTO attendance(id,account,start,distance) SELECT ?,?,?,? WHERE EXISTS (SELECT 1 FROM accounts WHERE id=? AND active=1) AND NOT EXISTS (SELECT 1 FROM attendance WHERE account=? AND end IS NULL)').bind(crypto.randomUUID(), account.id, now, d, account.id, account.id)]);
-            return out({ state: 'checked in', distance: Math.round(d), accuracy: Math.round(accuracy), verifiedAt: now });
+            return out({ state: 'checked in', distance: Math.round(d), accuracy: Math.round(accuracy), verifiedAt: now, sessionStart: (await db.prepare('SELECT start FROM attendance WHERE account=? AND end IS NULL').bind(account.id).first())?.start ?? 0 });
         }
         if (zone === 'outside') {
             if (open && account.outside_since && now - account.outside_since >= 15000) {
@@ -417,8 +411,15 @@ export async function handleGeo(req, native = false) {
         const records = await (id ? db.prepare('SELECT t.*,a.name,a.login,a.active,a.last_seen AS verified_end FROM attendance t JOIN accounts a ON a.id=t.account WHERE t.account=? AND ' + visible + ' ORDER BY t.start DESC').bind(id, cutoff) : db.prepare('SELECT t.*,a.name,a.login,a.active,a.last_seen AS verified_end FROM attendance t JOIN accounts a ON a.id=t.account WHERE ' + visible + ' ORDER BY t.start DESC').bind(cutoff)).all();
         if (action === 'export') {
             const cell = (v) => '"' + String(v ?? '').replace(/^[\s]*[=+@-]/, "'").replace(/"/g, '""') + '"';
-            const rows = [['Employee', 'Login ID', 'Check in (UTC)', 'Check out (UTC)', 'Minutes', 'End reason'], ...records.results.map((r) => [r.name, r.login, new Date(r.start).toISOString(), r.end ? new Date(r.end).toISOString() : '', Math.floor(Math.max(0, ((r.end ?? r.verified_end ?? r.start) - r.start)) / 60000), r.reason || 'in progress'])];
-            return new Response(rows.map(r => r.map(cell).join(',')).join('\r\n'), { headers: { 'Content-Type': 'text/csv;charset=utf-8', 'Content-Disposition': 'attachment; filename="geo-attend.csv"', 'Cache-Control': 'no-store' } });
+            const date = (t) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }).format(t);
+            const time = (t) => new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).format(t);
+            const rows = [['Employee', 'Login ID', 'Arrival date (IST)', 'Arrival time (IST)', 'Departure date (IST)', 'Departure time (IST)', 'Last verified date (IST)', 'Last verified time (IST)', 'Worked duration', 'Minutes', 'Status', 'End reason', 'Arrival UTC', 'Record end UTC']];
+            for (const r of records.results) {
+                const end = r.end ?? r.verified_end ?? r.start, seconds = Math.floor(Math.max(0, end - r.start) / 1000), minutes = Math.floor(seconds / 60), departed = r.end != null && r.reason === 'left workplace';
+                const status = r.end == null ? 'In progress' : departed ? 'Checked out' : r.reason === 'offline device record' ? 'Recovered offline attendance' : 'Tracking ended - departure not confirmed';
+                rows.push([r.name, r.login, date(r.start), time(r.start), departed ? date(end) : '', departed ? time(end) : '', date(end), time(end), `${Math.floor(seconds / 3600)}h ${Math.floor(seconds / 60) % 60}m ${seconds % 60}s`, minutes, status, r.reason || 'in progress', new Date(r.start).toISOString(), r.end == null ? '' : new Date(r.end).toISOString()]);
+            }
+            return new Response('\uFEFF' + rows.map(r => r.map(cell).join(',')).join('\r\n'), { headers: { 'Content-Type': 'text/csv;charset=utf-8', 'Content-Disposition': 'attachment; filename="geo-attend.csv"', 'Cache-Control': 'no-store' } });
         }
         const employees = admin ? (await db.prepare("SELECT a.id,a.name,a.login,a.role,a.active,a.last_seen,a.last_distance,a.accuracy,r.removed_at,h.last_contact,h.state AS tracking_health,h.fix_age,h.pending AS pending_records,h.battery_restricted FROM accounts a LEFT JOIN employee_health h ON h.account=a.id LEFT JOIN removed_employees r ON r.account=a.id WHERE a.role='employee' AND (a.active=1 OR r.removed_at>?) ORDER BY a.active DESC,a.name").bind(cutoff).all()).results : [{ id: account.id, name: account.name, login: account.login, active: account.active, last_seen: account.last_seen, last_distance: account.last_distance, accuracy: account.accuracy, ...(await db.prepare("SELECT last_contact,state AS tracking_health,fix_age,pending AS pending_records,battery_restricted FROM employee_health WHERE account=?").bind(account.id).first() || {}) }];
         return out({ records: records.results, employees, now: Date.now(), office: { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } });

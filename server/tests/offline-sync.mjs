@@ -17,10 +17,10 @@ try{
  const nested=record(undefined,now-3500000,now-1900000);
  assert.deepEqual((await request([nested])).body.accepted,[nested.id]);
  assert.equal((await prepare('SELECT COUNT(*) AS n FROM attendance').first()).n,1,'covered records add no time');
- assert.equal((await request([record(undefined,now-3700000,now-1900000)])).status,409,'partial overlap retained');
+ assert.equal((await request([record(undefined,now-3700000,now-1900000)])).status,200,'partial overlap imports only missing head');
  await prepare("INSERT INTO attendance(id,account,start,end,reason,distance) VALUES('adjacent','employee',?,?,'test',5)",[now-1800000,now-1700000]).run();
  assert.equal((await request([record(undefined,now-1900000,now-1750000)])).status,200,'adjacent coverage merged');
- assert.equal((await request([record(undefined,now-1900000,now-1600000)])).status,409,'uncovered tail retained');
+ assert.equal((await request([record(undefined,now-1900000,now-1600000)])).status,200,'uncovered tail imported');
  const conflict={...first,end:first.end-1};assert.equal((await request([conflict])).status,409,'same ID changed payload rejected');
  assert.equal((await request([{...record(undefined,now-1500000,now-1200000),account:'other'}])).status,409);
  assert.equal((await request([{...record(undefined,now-1500000,now-1200000),office:{name:'Other',lat:12,lon:77,radius:65}}])).status,409);
@@ -28,7 +28,7 @@ try{
  assert.equal((await request([record(undefined,now-700000000,now-699000000)])).status,409);
  assert.equal((await request([record()],false)).status,401);
  await prepare("INSERT INTO attendance(id,account,start,end,reason,distance) VALUES('gap-a','employee',?,?,'test',5),('gap-b','employee',?,?,'test',5)",[now-1000000,now-900000,now-800000,now-700000]).run();
- assert.equal((await request([record(undefined,now-950000,now-750000)])).status,409,'gap between covered intervals must never be discarded');
+ assert.equal((await request([record(undefined,now-950000,now-750000)])).status,200,'gap between covered intervals imported');
  const second=record(undefined,now-1500000,now-1200000);assert.equal((await request([second])).status,200);
  await prepare("UPDATE accounts SET last_seen=? WHERE id='employee'",[now-100000]).run();
  await prepare("INSERT INTO attendance(id,account,start,distance) VALUES('online-before','employee',?,5)",[now-110000]).run();
