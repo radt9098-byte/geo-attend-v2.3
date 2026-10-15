@@ -18,3 +18,11 @@ backups/
 *.geobackup
 *Key-Password*
 restored-backup.sql
+
+# Server credentials and local builds
+notification-credentials.json
+*firebase-adminsdk*.json
+**/build/
+**/node_modules/
+**/.gradle/
+*.p12

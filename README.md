@@ -43,3 +43,8 @@ The approved doorway/check logo is packaged as a raster resource. Navigation has
 Settings uses a profile strip, two tiles (Appearance + Controls for employees; Appearance + Workplace for admins), and full-width rows for About and admin Security & Backup. The red logout control stays last. Categories open scrollable bottom sheets. Login retains office ID/PIN, includes PIN visibility, and adds no social sign-in.
 
 Optional profile photos are selected with the Android document picker, sampled/cropped to a 256 px thumbnail, stripped of original metadata, and stored with the existing AES-GCM encrypted storage per account. No broad gallery permission or server upload is used; photos stay on that phone.
+
+
+### v3.3 notification build
+
+Adds Firebase Messaging for silent admin attendance alerts. The Windows `server/setup-notifications.cmd` applies the repeatable notification migration, imports a private local credential as a Cloudflare secret, and deploys the sender. Attendance and ID/PIN authentication remain in Cloudflare D1. The private server credential must never be committed or included in a GitHub release. See `server/NOTIFICATIONS.txt` for setup and phone verification. Other planned v3.3 UI changes remain pending.

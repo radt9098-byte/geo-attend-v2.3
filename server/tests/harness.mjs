@@ -7,7 +7,8 @@ export async function harness(){
  function prepare(sql,args=[]){return {sql,args,bind(...values){return prepare(sql,values)},async run(){return run({sql,args})},async all(){return run({sql,args})},async first(){return run({sql,args}).results[0]??null}}}
  const db={prepare,async batch(statements){return run(statements.map(s=>({sql:s.sql,args:s.args})))}};globalThis.testEnv={DB:db};
  writeFileSync(join(folder,'worker.mjs'),readFileSync(new URL('../worker.js',import.meta.url),'utf8').replace("import { env } from 'cloudflare:workers';","const env=globalThis.testEnv;"));
- const worker=await import(pathToFileURL(join(folder,'worker.mjs')));return {db,...worker,cleanup(){rmSync(folder,{recursive:true,force:true})}};
+ writeFileSync(join(folder,'push.js'),readFileSync(new URL('../push.js',import.meta.url),'utf8'));writeFileSync(join(folder,'package.json'),'{"type":"module"}');
+ const worker=await import(pathToFileURL(join(folder,'worker.mjs')));return {db,dbfile,...worker,cleanup(){rmSync(folder,{recursive:true,force:true})}};
 }
 export async function phone(name='Test Phone'){
  const pair=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']),raw=new Uint8Array(await crypto.subtle.exportKey('spki',pair.publicKey));const key=Buffer.from(raw).toString('base64'),id=Buffer.from(await crypto.subtle.digest('SHA-256',raw)).toString('hex');return {pair,info:{id,key,name}};

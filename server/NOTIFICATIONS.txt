@@ -1,0 +1,34 @@
+Geo Attend - private silent admin notifications
+
+1. Extract the entire PRIVATE setup ZIP on your Windows computer.
+2. Open the server folder and double-click setup-notifications.cmd.
+   It uses your existing Wrangler login. If needed, run npx wrangler login in CMD.
+3. Wait for DONE. Any failed step stops the setup; do not continue manually past errors.
+4. Install the included GeoAttend-v3.3.apk over v3.1/v3.2. Do not uninstall.
+5. Log in as the admin and allow Android notification permission.
+6. Open Settings > Notifications > Check server connection.
+7. Choose Send silent test. It should appear without sound or vibration.
+8. For a real test, have an approved employee enter and leave the workplace with
+   tracking enabled. Repeated GPS heartbeats must not create repeated alerts.
+
+What changes
+- Silent notifications name the employee and show the recorded event time.
+- Tapping opens the employee's attendance history.
+- A GPS interruption is labelled Attendance ended with its reason; it is not
+  represented as proof the person physically left.
+- Delayed alerts show their original time. Historical offline uploads do not
+  produce a burst of fresh check-in notifications.
+- Only active admin logins receive alerts. Logging out/recovery revokes registration.
+- Attendance remains in Cloudflare D1. Firebase only transports notification data.
+- Employee phones can keep the existing compatible app for this notification setup.
+
+Delivery requires internet, Google Play services, and Android notification permission.
+Power saving may delay alerts; a force-stopped app must be reopened. Build/server
+checks passed; confirm actual phone delivery with the test above.
+
+PRIVATE FILE: notification-credentials.json is a server credential. It must NEVER
+be put inside the APK, a GitHub commit/release, an email, or a public download.
+After setup keep this ZIP and credential in your own private storage.
+
+This is the notification build for v3.3. The other planned v3.3 changes (theme
+restoration, navigation fixes, employee health and admin charts) are not included.

@@ -1,4 +1,4 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.geoattend.app" android:versionCode="19" android:versionName="3.2">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.geoattend.app" android:versionCode="20" android:versionName="3.3">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
@@ -12,5 +12,9 @@
     <application android:label="Geo Attend" android:icon="@drawable/ic_logo" android:theme="@style/AppTheme" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
         <service android:name=".AttendanceService" android:exported="false" android:foregroundServiceType="location"/>
+        <service android:name=".PushMessaging" android:exported="false"><intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT"/></intent-filter></service>
+        <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false"/>
+        <meta-data android:name="firebase_analytics_collection_enabled" android:value="false"/>
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="admin_attendance_silent_v1"/>
     </application>
 </manifest>

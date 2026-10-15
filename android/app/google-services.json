@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "131143180509",
+    "project_id": "geo-attend-v3-3",
+    "storage_bucket": "geo-attend-v3-3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:131143180509:android:0417cce605ec1eae0cfb34",
+        "android_client_info": {
+          "package_name": "com.geoattend.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnaXRVLEfSDZqpnF-4akum50Ngmz10RzE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,3 +1,4 @@
+import { flushPush, cleanupPush } from './push.js';
 import { env } from 'cloudflare:workers';
 async function headers() { return new Headers(); }
 export function distance(a, b, c, d) { const r = (n) => n * Math.PI / 180; const h = Math.sin(r(c - a) / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(r(d - b) / 2) ** 2; return 6371000 * 2 * Math.atan2(Math.sqrt(Math.min(1, h)), Math.sqrt(Math.max(0, 1 - h))); }
@@ -101,7 +102,7 @@ export async function handleGeo(req, native = false) {
         }
     }
     if (action === 'status' && req.method === 'GET')
-        return out({ serverVersion: "3.1", setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login, recoveryReady: account.role === 'admin' ? !!await db.prepare('SELECT account FROM admin_recovery WHERE account=?').bind(account.id).first() : undefined } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
+        return out({ serverVersion: "3.1", releaseVersion: "3.3", pushEnabled: !!env.FCM_SERVICE_ACCOUNT, setup: !!org, user: account ? { id: account.id, name: account.name, role: account.role, login: account.login, recoveryReady: account.role === 'admin' ? !!await db.prepare('SELECT account FROM admin_recovery WHERE account=?').bind(account.id).first() : undefined } : null, office: org && account ? { name: org.name, lat: org.lat, lon: org.lon, radius: org.radius } : null });
     async function limited(key) { const now = Date.now(), a = await db.prepare('SELECT * FROM login_attempts WHERE key=?').bind(key).first(); if (a && a.until > now && a.failures >= 5)
         return false; await db.prepare('INSERT INTO login_attempts(key,failures,until) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET failures=CASE WHEN until<? THEN 1 ELSE failures+1 END,until=CASE WHEN until<? THEN ? ELSE until END').bind(key, now + 600000, now, now, now + 600000).run(); return true; }
     if (action === 'recoverAdmin' && req.method === 'POST') {
@@ -182,6 +183,38 @@ export async function handleGeo(req, native = false) {
     if (!account)
         return fail('Please log in to continue.', 401);
     const admin = account.role === 'admin';
+    if (action === 'registerPush' && req.method === 'POST') {
+        if (!native || !admin || !sessionDevice || !token)
+            return fail('Admin phone access required.', 403);
+        const pushToken = typeof b.token === 'string' ? b.token : '';
+        if (!/^[A-Za-z0-9_:\-]{64,4096}$/.test(pushToken))
+            return fail('Invalid notification registration.');
+        const id = await digest(pushToken), session = await digest(token), now = Date.now();
+        await db.batch([db.prepare('DELETE FROM push_registrations WHERE account=? AND device=? AND id<>?').bind(account.id, sessionDevice.id, id), db.prepare('INSERT INTO push_registrations(id,token,session,account,device,created) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET session=excluded.session,account=excluded.account,device=excluded.device,created=excluded.created').bind(id, pushToken, session, account.id, sessionDevice.id, now)]);
+        return out({ ok: true });
+    }
+    if (action === 'pushStatus' && req.method === 'GET') {
+        if (!native || !admin || !token)
+            return fail('Admin phone access required.', 403);
+        const registration = await db.prepare('SELECT id FROM push_registrations WHERE session=?').bind(await digest(token)).first();
+        const pending = await db.prepare('SELECT COUNT(*) AS n FROM push_deliveries WHERE recipient=? AND sent IS NULL').bind(account.id).first();
+        return out({ configured: !!env.FCM_SERVICE_ACCOUNT, registered: !!registration, pending: pending.n });
+    }
+    if (action === 'testPush' && req.method === 'POST') {
+        if (!native || !admin || !token)
+            return fail('Admin phone access required.', 403);
+        if (!env.FCM_SERVICE_ACCOUNT)
+            return fail('Finish the notification server setup first.', 503);
+        const now = Date.now(), last = await db.prepare("SELECT created FROM push_events WHERE employee=? AND reason='notification test' ORDER BY created DESC LIMIT 1").bind(account.id).first();
+        if (last && now - last.created < 60000)
+            return fail('Wait one minute before sending another test.', 429);
+        const id = crypto.randomUUID() + ':in', session = await digest(token);
+        const r = await db.prepare('SELECT id FROM push_registrations WHERE session=?').bind(session).first();
+        if (!r)
+            return fail('Enable notifications on this phone and reopen the app first.', 409);
+        await db.batch([db.prepare("INSERT INTO push_events(id,employee,name,kind,at,reason,created) VALUES(?,?,?,'in',?,'notification test',?)").bind(id, account.id, 'Geo Attend', now, now), db.prepare('INSERT INTO push_deliveries(event,registration,session,recipient,next_at) SELECT ?,id,session,account,? FROM push_registrations WHERE session=?').bind(id, now, session)]);
+        return out({ ok: true, message: 'Test queued. Keep notifications allowed on this phone.' });
+    }
     async function reconcile() { const now = Date.now(); await db.prepare("UPDATE attendance SET end=MAX(start,COALESCE((SELECT last_seen FROM accounts WHERE accounts.id=attendance.account),start)),reason='tracking interrupted' WHERE end IS NULL AND account IN (SELECT id FROM accounts WHERE last_seen IS NULL OR last_seen<?)").bind(now - 90000).run(); }
     if (action === 'createRecovery' && req.method === 'POST') {
         if (!admin)
@@ -362,9 +395,18 @@ catch (e) {
     return fail('Could not complete the request. Please try again.', 500);
 } }
 export const POST = GET;
-export default { async scheduled() { await purgeRemoved(env.DB); }, async fetch(request) { const url = new URL(request.url); if (url.pathname === '/api/native' && (request.method === 'GET' || request.method === 'POST')) {
+export default { async scheduled() { const now = new Date(); if (now.getUTCHours() === 19 && now.getUTCMinutes() === 30)
+        await purgeRemoved(env.DB); await cleanupPush(env.DB); await flushPush(env.DB, env.FCM_SERVICE_ACCOUNT); }, async fetch(request, _bindings, ctx) { const url = new URL(request.url); if (url.pathname === '/api/native' && (request.method === 'GET' || request.method === 'POST')) {
         try {
-            return await handleGeo(request, true);
+            const response = await handleGeo(request, true);
+            if (env.FCM_SERVICE_ACCOUNT) {
+                const push = flushPush(env.DB, env.FCM_SERVICE_ACCOUNT).catch(() => console.error('Notification delivery pending'));
+                if (ctx)
+                    ctx.waitUntil(push);
+                else
+                    await push;
+            }
+            return response;
         }
         catch (e) {
             console.error('Attendance request failed');
