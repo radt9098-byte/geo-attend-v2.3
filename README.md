@@ -1,12 +1,12 @@
-# Geo Attend 3.1
+# Geo Attend 3.2
 
 Private Android office attendance app with a Cloudflare Worker and D1 database.
 
-- `android/`: Java Android app, version 3.1 / versionCode 18. Android 8+, SDK 36, JDK 17.
+- `android/`: Java Android app, version 3.2 / versionCode 19. Android 8+, SDK 36, JDK 17.
 - `server/`: Worker, repeatable migration, daily removal-retention cleanup and encrypted manual backup scripts.
 
 The app uses the office-owned Worker at https://geo-attend-office.caresystemsandcontrols.workers.dev.
-Existing accounts and attendance are preserved by the upgrade. Follow `server/UPDATE-3.1.txt` in order.
+Version 3.2 is a UI update compatible with the existing v3.1 server. Install its APK over v3.1 without uninstalling or rerunning a server migration. For older installations that have not migrated to server v3.1, first follow `server/UPDATE-3.1.txt` in order.
 
 ## Security and management
 
@@ -33,3 +33,13 @@ Android tests in `android/tests` check status presentation and Java ECDSA conver
 ## UI
 
 Floating logo/name capsule at top-left and capsule navigation over the page. Workplace and sync details scroll. Theme, tracking and logout controls are in Settings; logout is red and last. Attendance automatic refresh updates records in place while preserving scroll/filter selection.
+
+## Version 3.2 UI
+
+AMOLED is the default, with stable session lighting that changes on closing/reopening the app. The ambient seed survives UI redraws, tab changes, rotation, and system photo/settings pickers. Dark, Light, Emerald Glass, and Frosted Slate are also available. Cards and floating capsules use translucent tinted fills and subtle edges; no continuous blur loop or background animation runs.
+
+The approved doorway/check logo is packaged as a raster resource. Navigation has a 280 ms slide/fade, sliding selection, ripple feedback, and light press animations. System-disabled animations and the local Reduce motion setting are respected. Automatic refresh does not replay page entrances; Attendance updates its records in place and keeps scroll/filter state.
+
+Settings uses a profile strip, two tiles (Appearance + Controls for employees; Appearance + Workplace for admins), and full-width rows for About and admin Security & Backup. The red logout control stays last. Categories open scrollable bottom sheets. Login retains office ID/PIN, includes PIN visibility, and adds no social sign-in.
+
+Optional profile photos are selected with the Android document picker, sampled/cropped to a 256 px thumbnail, stripped of original metadata, and stored with the existing AES-GCM encrypted storage per account. No broad gallery permission or server upload is used; photos stay on that phone.

@@ -1,0 +1,16 @@
+package com.geoattend.app;
+import android.content.Context;
+import android.graphics.*;
+import android.net.Uri;
+import android.util.Base64;
+import android.media.ExifInterface;
+import java.io.*;
+import java.security.MessageDigest;
+/** Per-account, local encrypted thumbnails. Original images and metadata are not retained. */
+public final class AvatarStore {
+ private static String key(String id){try{byte[] bytes=MessageDigest.getInstance("SHA-256").digest(id.getBytes("UTF-8"));StringBuilder b=new StringBuilder("avatar_");for(byte v:bytes)b.append(String.format(java.util.Locale.ROOT,"%02x",v&255));return b.toString();}catch(Exception e){throw new IllegalStateException(e);}}
+ public static boolean has(Context c,String id){return new SessionStore(c).prefs().contains(key(id));}
+ public static void remove(Context c,String id){String name=key(id);new SessionStore(c).prefs().edit().remove(name).remove(name+"Iv").apply();}
+ public static Bitmap read(Context c,String id){try{String value=new SessionStore(c).readPrivate(key(id));if(value.isEmpty()||value.length()>400000)return null;byte[] bytes=Base64.decode(value,Base64.NO_WRAP);return BitmapFactory.decodeByteArray(bytes,0,bytes.length);}catch(Exception e){return null;}}
+ public static void save(Context c,String id,Uri uri)throws Exception{BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;try(InputStream in=c.getContentResolver().openInputStream(uri)){if(in==null)throw new IOException("Could not open this photo.");BitmapFactory.decodeStream(in,null,bounds);}if(bounds.outWidth<=0||bounds.outHeight<=0||bounds.outWidth>50000||bounds.outHeight>50000)throw new IOException("Choose a supported image file.");BitmapFactory.Options options=new BitmapFactory.Options();options.inSampleSize=1;while(Math.max(bounds.outWidth,bounds.outHeight)/options.inSampleSize>768)options.inSampleSize*=2;Bitmap bitmap;try(InputStream in=c.getContentResolver().openInputStream(uri)){bitmap=BitmapFactory.decodeStream(in,null,options);}if(bitmap==null)throw new IOException("Could not read this photo. Try a JPEG or PNG.");int orientation=1;try(InputStream in=c.getContentResolver().openInputStream(uri)){orientation=new ExifInterface(in).getAttributeInt(ExifInterface.TAG_ORIENTATION,1);}catch(Exception ignored){}Matrix matrix=new Matrix();if(orientation==2)matrix.setScale(-1,1);if(orientation==3)matrix.setRotate(180);if(orientation==4)matrix.setScale(1,-1);if(orientation==5){matrix.setRotate(90);matrix.postScale(-1,1);}if(orientation==6)matrix.setRotate(90);if(orientation==7){matrix.setRotate(270);matrix.postScale(-1,1);}if(orientation==8)matrix.setRotate(270);Bitmap oriented=Bitmap.createBitmap(bitmap,0,0,bitmap.getWidth(),bitmap.getHeight(),matrix,true);if(oriented!=bitmap)bitmap.recycle();int size=Math.min(oriented.getWidth(),oriented.getHeight());Bitmap square=Bitmap.createBitmap(oriented,(oriented.getWidth()-size)/2,(oriented.getHeight()-size)/2,size,size);Bitmap thumb=Bitmap.createScaledBitmap(square,256,256,true);ByteArrayOutputStream out=new ByteArrayOutputStream();thumb.compress(Bitmap.CompressFormat.JPEG,88,out);new SessionStore(c).savePrivate(key(id),Base64.encodeToString(out.toByteArray(),Base64.NO_WRAP));if(thumb!=square)thumb.recycle();if(square!=oriented)square.recycle();oriented.recycle();}
+}
