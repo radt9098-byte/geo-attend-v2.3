@@ -136,3 +136,10 @@ CREATE TABLE IF NOT EXISTS offline_receipts (
  created INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS offline_receipts_account ON offline_receipts(account);
+
+CREATE TABLE IF NOT EXISTS work_calendar (
+ day TEXT PRIMARY KEY,
+ mode TEXT NOT NULL CHECK(mode IN ('all','holiday','selected')),
+ employees TEXT NOT NULL DEFAULT '[]',
+ updated INTEGER NOT NULL
+);

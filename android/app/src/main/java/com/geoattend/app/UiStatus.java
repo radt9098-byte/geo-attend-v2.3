@@ -6,7 +6,8 @@ public final class UiStatus {
   if(offline)return "Server unavailable · saved attendance";
   if(!running)return "Tracking paused";
   String s=status.toLowerCase(Locale.ROOT);
-  if(age>45000)return "Waiting for fresh GPS";
+  if(s.contains("not scheduled"))return "Not scheduled today";
+  if(age>180000)return "Waiting for fresh GPS";
   if(s.contains("retrying"))return "Connection retrying · saved on phone";
   if(s.contains("attention"))return "Sync needs attention";
   if(s.contains("mock")||s.contains("rejected"))return "Location rejected";

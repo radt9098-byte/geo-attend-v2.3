@@ -29,7 +29,7 @@ try{
  execFileSync('python3',['-c',"import sqlite3,sys;c=sqlite3.connect(sys.argv[1]);s=open(sys.argv[2]).read();c.executescript(s);c.executescript(s);c.commit()",w.dbfile,new URL('../migration-3.3.1.sql',import.meta.url).pathname]);
  assert.equal((await db.prepare('SELECT COUNT(*) n FROM attendance').first()).n,1);
  const clock=Date.now();await db.prepare('UPDATE attendance SET start=? WHERE account=? AND end IS NULL').bind(clock-240000,e.id).run();await db.prepare('UPDATE accounts SET last_seen=? WHERE id=?').bind(clock-60000,e.id).run();await call('health',{state:'gps_off'},employee,et);
- const csv=await (await w.handleGeo(await requestObject('export',null,admin,at),true)).text();assert.match(csv,/,"3","In progress","in progress"/,'CSV uses verified time, not the latest connectivity report');
+ const csv=await (await w.handleGeo(await requestObject('export',null,admin,at),true)).text();assert.match(csv,/,"0h 3m","In progress",/,'CSV uses verified time, not the latest connectivity report');
  await call('pause',{},employee,et);assert.equal((await db.prepare('SELECT state FROM employee_health WHERE account=?').bind(e.id).first()).state,'paused');
  console.log('PASS: employee-only advisory health, GPS uncertainty, unchanged verified hours, pending-record conflicts, validation and repeatable health migration.');
 }finally{w.cleanup()}

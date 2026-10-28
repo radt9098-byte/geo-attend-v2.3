@@ -12,7 +12,7 @@ public final class TrackingWorkTest {
   long now=1_800_000;
   if(!TrackingHealth.label("gps_off",now-15000,0,now,false).equals("GPS off"))throw new AssertionError();
   if(!TrackingHealth.label("uncertain",now-15000,0,now,false).equals("GPS uncertain"))throw new AssertionError();
-  if(!TrackingHealth.label("inside",now-100000,now-100000,now,false).equals("No recent connection"))throw new AssertionError();
+  if(!TrackingHealth.label("inside",now-400000,now-400000,now,false).equals("No recent connection"))throw new AssertionError();
   if(!TrackingHealth.label("inside",now-1000,now-1000,now,true).startsWith("Saved status"))throw new AssertionError();
   if(!TrackingHealth.label("sync_attention",now-1000,now-1000,now,false).contains("Online"))throw new AssertionError();
   if(!TrackingHealth.label("paused",now-1000,0,now,false).equals("Tracking paused"))throw new AssertionError();

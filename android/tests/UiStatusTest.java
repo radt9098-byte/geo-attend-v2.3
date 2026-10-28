@@ -6,8 +6,8 @@ public final class UiStatusTest {
   expect("GPS uncertain",true,false,true,1000,"GPS uncertain");
   expect("Checked out",true,false,true,1000,"outside workplace");
   expect("Tracking paused",false,false,true,1000,"checked in");
-  expect("Waiting for fresh GPS",true,false,true,45001,"checked in");
-  expect("Offline · pending sync",true,true,false,1000,"Offline · checked in · pending sync");
+  expect("Waiting for fresh GPS",true,false,true,180001,"checked in");
+  expect("Server unavailable · saved attendance",true,true,false,1000,"Offline · checked in · pending sync");
   expect("Sync needs attention",true,false,true,1000,"Offline sync needs attention: error");
   expect("Location rejected",true,false,true,1000,"Mock location rejected");
   expect("Confirming exit",true,false,true,1000,"confirming exit");

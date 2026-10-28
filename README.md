@@ -57,3 +57,11 @@ Separates live location requests from historical upload work, adds fused locatio
 
 ## Version 3.4
 Attendance recovery now subtracts overlaps transactionally and uses stable retry receipts. GPS evidence is saved independently of HTTP uploads. CSV exports include readable IST dates and AM/PM times, worked duration, confirmed departure versus last verified time, and UTC reference columns. Run `server/update-3.4.cmd`, then install the signed v3.4 APK over the existing app. See `server/UPDATE-3.4.txt` for verification steps.
+
+## Version 3.5
+Integrated Attendance calendar with Sunday holidays and selected-employee working days;
+admin-only period-filtered IST CSV at the top of history; short-session filtering after
+recovery reconciliation; 90-second location requests and two-minute routine sync;
+100 m approach geofence with precise attendance verification; no continuous app CPU
+wake lock. Existing light/dark/AMOLED themes and floating navigation are retained.
+Run server/update-3.5.cmd before installing the APK. See server/UPDATE-3.5.txt.

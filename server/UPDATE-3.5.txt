@@ -1,0 +1,53 @@
+Geo Attend 3.5 — Attendance calendar and lower-power tracking
+
+UPDATE ON WINDOWS
+1. Keep existing employee apps online until their pending attendance has synced.
+2. Extract this ZIP. Run server/update-3.5.cmd and wait for DONE.
+3. Install GeoAttend-v3.5.apk OVER the existing app on admin and employee phones.
+4. Open each employee app. Keep automatic attendance enabled.
+Do not uninstall, clear app data, reset D1, or repeat Firebase setup.
+The updater adds a calendar table and deploys to the existing Cloudflare Worker.
+It preserves accounts, workplace coordinates/radius, attendance and Firebase secrets.
+
+ATTENDANCE
+Calendar is inside Attendance, without another navigation tab.
+Choose Day / Month / Year. Tap the month heading to jump to a date.
+Admins can set today/future dates as all employees working, a holiday, or selected
+employees working. Sundays default to holidays. Employees can view their schedule.
+Existing attendance is preserved when a schedule changes. A stop caused by the
+schedule is not labelled as a physical checkout. Changes reach disconnected phones
+after reconnection; the last saved schedule applies while offline.
+
+CSV
+Only admins can export, using the button beside Attendance history.
+The chosen day/month/year and employee filter apply to the export.
+Rows are grouped by month, employee, then check-in time; each row has a Month column.
+Dates and AM/PM times use IST. Unconfirmed checkout fields are blank and Last verified
+shows where recorded time ended. Overnight sessions belong to their check-in month.
+Touching recovery fragments are combined before excluding completed sessions shorter
+than 60 seconds from history, exported rows, and displayed totals. Active check-ins
+remain visible immediately. Raw evidence is retained for safe retry reconciliation.
+Admins see recorded-hours bars when the selected period contains over three days
+with attendance. Employees do not see charts.
+
+BATTERY
+Location requests target 90 seconds. Routine server updates target two minutes.
+Transitions can upload sooner. Android can delay these requests; they are not timers
+that guarantee a fix exactly every 90 seconds. There is no continuous app CPU wake lock.
+Fused location is preferred; native GPS is a fallback, not a simultaneous second stream.
+A 100 m approach fence assists lower-power tracking away from the office. The configured
+workplace radius still controls attendance (50 m default for new workplaces).
+For this approach fence, use Settings > Controls > Location & battery settings >
+App settings > Location > Allow all the time, if offered. Without this permission or
+compatible Play services, regular 90-second location requests remain available.
+Holidays/unscheduled days stop app location requests. A lightweight foreground service
+keeps the saved schedule current and can resume on a working day while Android allows it.
+The six-minute interruption threshold prevents normal slower updates looking offline.
+Recorded hours never advance merely because the phone sends a connectivity report.
+
+CHECK ON YOUR TEST PHONE
+Check an entry and exit, screen locked for 1–2 hours, internet loss/reconnection,
+Sunday/selected-employee schedules, CSV month/year selection and a midnight transition.
+Compare Android's app battery reading over equivalent shifts before/after this update.
+No universal battery percentage is promised; manufacturer power management and GPS
+reception vary. Force-stop/power-off require reopening the app.

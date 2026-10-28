@@ -3,11 +3,12 @@ package com.geoattend.app;
 public final class TrackingHealth {
  public static String label(String state,long contact,long verified,long now,boolean saved){
   if(saved)return "Saved status · awaiting connection";
-  if(contact<=0)return verified>0&&now-verified<=90000?"Location connected":"No recent connection";
-  if(now-contact>90000)return "No recent connection";
+  if(contact<=0)return verified>0&&now-verified<=360000?"Location connected":"No recent connection";
+  if(now-contact>360000)return "No recent connection";
   return reported(state);
  }
  public static String reported(String state){switch(state){
+  case "scheduled_off":return "Not scheduled today";
   case "inside":case "outside":return "Location connected";
   case "uncertain":return "GPS uncertain";
   case "gps_off":return "GPS off";

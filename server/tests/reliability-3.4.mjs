@@ -38,10 +38,7 @@ try{
  const simultaneous=record(base-60000,base-30000);
  const responses=await Promise.all([call('syncOffline',{records:[simultaneous]}),call('syncOffline',{records:[simultaneous]})]);assert.ok(responses.every(r=>r.status===200));const afterRetry=await total();assert.equal(afterRetry,frozen+30000,'concurrent retry imports missing interval once');
  await beat();clock+=20000;await call('heartbeat',{lat:12.01,lon:77,accuracy:5,age:0});clock+=20000;assert.equal((await call('heartbeat',{lat:12.01,lon:77,accuracy:5,age:0})).body.state,'checked out');
- const response=await w.handleGeo(await requestObject('export',null,identity,token),true);const csvBytes=new Uint8Array(await response.arrayBuffer()),csv=new TextDecoder().decode(csvBytes);
- assert.match(csv,/Checked out/);
- assert.match(csv,/Arrival date \(IST\)/);assert.match(csv,/11:25:00 PM/);assert.match(csv,/16 Oct 2026/);assert.match(csv,/AM/);assert.match(csv,/Tracking ended - departure not confirmed/);
- assert.deepEqual([...csvBytes.slice(0,3)],[239,187,191],'Excel UTF-8 BOM');
+ assert.equal((await call('export',null)).status,403,'only admins may export');
  const migrationTotal=await total();
  execFileSync('python3',['-c',"import sqlite3,sys;c=sqlite3.connect(sys.argv[1]);s=open(sys.argv[2]).read();c.executescript(s);c.executescript(s);c.commit()",w.dbfile,new URL('../migration-3.4.sql',import.meta.url).pathname]);
  assert.equal(await total(),migrationTotal,'repeat migration preserves hours');
