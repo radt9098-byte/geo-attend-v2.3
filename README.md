@@ -1,59 +1,117 @@
-# Geo Attend 3.2
+# Geo Attend
 
-Private Android office attendance app with a Cloudflare Worker and D1 database.
+**Private Android attendance for your office.** Geo Attend records attendance when an employee’s phone has a verified location inside the workplace zone, and gives the administrator a clear view of working hours, attendance history and tracking status.
 
-- `android/`: Java Android app, version 3.2 / versionCode 19. Android 8+, SDK 36, JDK 17.
-- `server/`: Worker, repeatable migration, daily removal-retention cleanup and encrypted manual backup scripts.
+**Latest Android release: [v3.7](https://github.com/radt9098-byte/geo-attend-v2.3/releases/tag/v3.7)**  
+[All releases](https://github.com/radt9098-byte/geo-attend-v2.3/releases)
 
-The app uses the office-owned Worker at https://geo-attend-office.caresystemsandcontrols.workers.dev.
-Version 3.2 is a UI update compatible with the existing v3.1 server. Install its APK over v3.1 without uninstalling or rerunning a server migration. For older installations that have not migrated to server v3.1, first follow `server/UPDATE-3.1.txt` in order.
+## How it works
 
-## Security and management
+1. **Set up your office.** On the first office setup, the administrator creates an ID and PIN, enters the workplace name and coordinates, and chooses a 50–80 metre attendance radius.
+2. **Add your team.** The admin creates employee accounts and assigns each an ID and PIN. Employees sign in on their phones and the admin approves their attendance phone.
+3. **Enable automatic attendance.** Employees allow precise location and enable tracking. Verified location fixes inside the workplace start attendance; reliable outside fixes confirm checkout. A location estimate alone does not guarantee a check-in.
+4. **Save and sync.** Attendance evidence is saved on the employee phone during an internet interruption and uploaded when connectivity returns. Sync reconciliation prevents overlapping evidence from counting the same time twice.
+5. **Review the day.** The admin can see team totals, individual records and tracking issues, then export a readable attendance CSV. Employees can see their own hours, attendance and live location status.
 
-Each employee has one admin-approved phone. Phone requests follow successful PIN authentication; a P-256 private key in Android Keystore signs requests. The server binds sessions to the approved key and checks signatures, request content, timestamps and one-use nonces. Approving a replacement revokes previous sessions. Admin management access remains available from more than one phone.
+## Admin features
 
-Admins can reset employee PINs, revoking sessions without deleting history. Existing admins create a recovery code from Settings with current-PIN verification. New office setup creates one automatically. Recovery codes are high-entropy, hashed on the server, rotate after use, and never displayed again. Recovery revokes existing admin sessions.
+- **Overview:** checked-in count, team hours, recent attendance and a Needs attention shortcut.
+- **Employee management:** add employees, reset PINs, approve replacement phones and remove employee access.
+- **Search and filters:** find employees by name or login ID, or filter by Checked in and Needs attention.
+- **Employee details:** review recorded hours, last phone contact, last verified location and reported tracking issues.
+- **Attendance history:** select a day, month or year and filter by employee.
+- **Integrated calendar:** Sundays are holidays by default. Override a date as a working day or holiday, or schedule only selected employees. The phone stops location collection on an unscheduled day once that schedule is applied.
+- **Recorded-hours chart:** open the graph when needed; available to admins when the selection contains more than three days of attendance.
+- **CSV export:** export the selected period and employee from the top of Attendance history. Rows include a month category, separate IST dates and AM/PM times, recorded duration and attendance status.
+- **Silent notifications:** receive employee check-in and checkout alerts with the employee’s name, and tap to open their attendance.
+- **Account recovery:** create or replace an admin recovery code through Settings.
 
-Removed employees lose access immediately. History is held for 30 days after removal, then hidden from reports and deleted by daily cleanup in bounded batches. Existing inactive employees get 30 days from migration. Active attendance has no time-based deletion. Downloaded backups are independent copies.
+## Employee features
 
-## Upgrade and APK signing
+- Own attendance status, hours today and recent attendance.
+- Live workplace distance, GPS accuracy, latest location update and pending-sync count.
+- Own schedule through Attendance.
+- Tracking controls and location/battery settings under **Settings → Controls**.
+- Offline attendance storage with syncing after reconnection.
+- Optional profile photo, or a consistent coloured initials avatar.
+- Appearance preferences and **Settings → App updates**.
 
-Sync and pause all old apps before deploying `server/update-3.1.cmd`, which makes old unbound sessions incompatible. Version 3.1 is signed with a private release key rather than the previous test key, so the first upgrade requires uninstall/reinstall. Synced cloud history remains; uninstall deletes unsynced phone records. Future builds must use the same private release key. Keys/passwords and live data are excluded from this repository.
+CSV exports, team charts, schedule editing and employee management are admin-only.
 
-## Backups
+## Clear attendance and tracking status
 
-`server/backup.cmd` exports the full D1 database on the owner's Windows computer and encrypts it using scrypt-derived AES-256-GCM. Backups are manual and add no subscription; existing Cloudflare usage limits still apply. `decrypt-backup.mjs` decrypts a private backup for restoration to a new empty database. Keep backup passwords separately and test restoration before relying on a backup.
+Geo Attend distinguishes **verified attendance** from **phone connectivity**. An online phone is not automatically checked in, and an offline report does not prove that an employee left the workplace.
 
-## Validation
+When verified location updates stop, the app allows a short interruption window, then ends recorded time at the last verified location rather than adding unverified hours. History distinguishes a confirmed checkout from an unconfirmed departure or tracking interruption. Older phone reports are labelled as historical status.
 
-`cd server && npm test` checks offline synchronization, device approval/revocation, signature replay/tampering, role access, PIN reset, recovery rotation, 30-day cleanup, repeatable migration, and backup encryption. Tests use Node and Python SQLite with foreign keys and transactional batches.
+Recovered fragments are reconciled before completed sessions shorter than one minute are excluded from attendance reports.
 
-Android tests in `android/tests` check status presentation and Java ECDSA conversion. The Java-generated signature is also verified with WebCrypto. Native Java/resource compilation, APK version metadata and release signatures are verified. Physical-device GPS/background/UI testing and deployed-server validation remain required.
+## Appearance
 
-## UI
+Geo Attend uses floating logo and navigation capsules, translucent cards and an AMOLED mode with ambient lighting that changes when the app is closed and reopened. Existing light and dark appearances remain available.
 
-Floating logo/name capsule at top-left and capsule navigation over the page. Workplace and sync details scroll. Theme, tracking and logout controls are in Settings; logout is red and last. Attendance automatic refresh updates records in place while preserving scroll/filter selection.
+Version 3.7 adds a compact workplace/status row, cleaner Overview metrics, searchable employee cards and employee detail sheets while retaining the existing theme colours, ambient lighting and glass finish.
 
-## Version 3.2 UI
+Settings includes role-specific categories, an optional profile image and a red **Log out** button at the bottom. There is no Google or Facebook sign-in.
 
-AMOLED is the default, with stable session lighting that changes on closing/reopening the app. The ambient seed survives UI redraws, tab changes, rotation, and system photo/settings pickers. Dark, Light, Emerald Glass, and Frosted Slate are also available. Cards and floating capsules use translucent tinted fills and subtle edges; no continuous blur loop or background animation runs.
+## Where data is stored
 
-The approved doorway/check logo is packaged as a raster resource. Navigation has a 280 ms slide/fade, sliding selection, ripple feedback, and light press animations. System-disabled animations and the local Reduce motion setting are respected. Automatic refresh does not replay page entrances; Attendance updates its records in place and keeps scroll/filter state.
+| Data | Storage |
+| --- | --- |
+| Accounts, workplace, schedules and synced attendance | The office’s Cloudflare D1 database, accessed through its Cloudflare Worker |
+| Pending offline attendance and app session data | Protected storage on the employee phone |
+| Optional profile photo | Encrypted local storage on that phone; not uploaded or shared between phones |
+| Notification registration and delivery | Cloudflare service and Firebase Cloud Messaging |
+| CSV exports and manual backups | Wherever the admin saves the downloaded files |
 
-Settings uses a profile strip, two tiles (Appearance + Controls for employees; Appearance + Workplace for admins), and full-width rows for About and admin Security & Backup. The red logout control stays last. Categories open scrollable bottom sheets. Login retains office ID/PIN, includes PIN visibility, and adds no social sign-in.
+Firebase Messaging delivers alerts; it is not the attendance database. Active employee attendance has no automatic age-based deletion in the current implementation. Removed employee attendance is retained for 30 days, then deleted from the live database through scheduled cleanup. Exported files and backups remain separate copies.
 
-Optional profile photos are selected with the Android document picker, sampled/cropped to a 256 px thumbnail, stripped of original metadata, and stored with the existing AES-GCM encrypted storage per account. No broad gallery permission or server upload is used; photos stay on that phone.
+## Security
 
+- ID and PIN sign-in with server-side credential verification.
+- Device-bound sessions and signed requests using an Android Keystore key.
+- Checks for modified requests, expired timestamps and replayed requests.
+- One admin-approved attendance phone per employee; approving a replacement revokes the previous phone’s access.
+- Employee PIN reset and admin recovery revoke the affected sessions.
+- Recovery codes are stored as hashes and rotate after use.
+- Private APK signing for compatible future updates.
+- Optional manual encrypted database backups; keep the backup password separately.
 
-### v3.3 notification build
+Sync pending records before replacing a phone or uninstalling the app.
 
-Adds Firebase Messaging for silent admin attendance alerts. The Windows `server/setup-notifications.cmd` applies the repeatable notification migration, imports a private local credential as a Cloudflare secret, and deploys the sender. Attendance and ID/PIN authentication remain in Cloudflare D1. The private server credential must never be committed or included in a GitHub release. See `server/NOTIFICATIONS.txt` for setup and phone verification. Other planned v3.3 UI changes remain pending.
+## Install or update
 
+1. Download **GeoAttend-v3.7.apk** from the [v3.7 release](https://github.com/radt9098-byte/geo-attend-v2.3/releases/tag/v3.7).
+2. Install it over the existing privately signed Geo Attend app on both admin and employee phones. **Do not uninstall or clear app data.**
+3. Open the employee app after installation and check that tracking and the required Android permissions are enabled.
 
-### v3.3.1 tracking reliability
+Current attendance features require the matching office server setup. The v3.5 server update supplies the calendar and reporting features.
 
-Separates live location requests from historical upload work, adds fused location with native fallback, and reports advisory employee tracking health without changing verified attendance rules. The repeatable Windows update uses the existing Worker and notification secret. Install the APK on both roles; see `server/TRACKING-3.3.1.txt` for verification.
+### In-app updates
 
+Version 3.7 includes **Settings → App updates → Check for updates** for both roles.
 
-## Version 3.4
-Attendance recovery now subtracts overlaps transactionally and uses stable retry receipts. GPS evidence is saved independently of HTTP uploads. CSV exports include readable IST dates and AM/PM times, worked duration, confirmed departure versus last verified time, and UTC reference columns. Run `server/update-3.4.cmd`, then install the signed v3.4 APK over the existing app. See `server/UPDATE-3.4.txt` for verification steps.
+The office owner must first deploy the matching **v3.7 Update Pack** using `Enable-In-App-Updates.cmd`. Future signed APKs must then be published to that update service; uploading an APK to GitHub alone does not make it appear inside the app.
+
+Downloads require a signed-in authorised phone. The app verifies the download size, SHA-256, application ID, version and signing certificate before offering installation. Android asks for installation confirmation; updates are not installed silently.
+
+## Release highlights
+
+| Version | Main changes |
+| --- | --- |
+| **3.7** | Cleaner Overview and Employees screens, compact workplace/status row, initials avatars, search and filters, employee details, private in-app update support |
+| **3.6** | Attendance UI improvements, calendar and graph controls, clearer record presentation |
+| **3.5 — Major** | Integrated calendar, selected-employee schedules, month/year CSV reporting and lower-power tracking |
+| **3.4** | Offline overlap reconciliation, retry deduplication and clearer attendance exports |
+| **3.3** | Silent admin attendance notifications and tracking-health reporting |
+| **3.2** | AMOLED ambient appearance, floating capsules and organised Settings |
+| **3.1 — Major** | Phone approval, signed requests, account recovery, removal retention and encrypted manual backups |
+
+## Repository
+
+- `android/`: native Java Android application.
+- `server/`: Cloudflare Worker, database migrations, tests and Windows administration tools.
+
+Use the versioned APK under **Release assets** to install a release. The default-branch source and GitHub-generated source archives may be older than the published APKs; their version should not be inferred from this README.
+
+This is a private office project. Keep signing keys, passwords, recovery codes, Firebase server credentials, attendance exports and database backups out of repository commits and release assets.
