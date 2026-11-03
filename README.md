@@ -22,6 +22,59 @@ A working day can begin at the office, continue at a factory and end at a client
 
 *The graphics in this README are product illustrations and validation summaries; they are not app screenshots.*
 
+## Where the idea began
+
+Geo Attend started with a practical question from its creator: **could a private office record attendance automatically when an employee's phone entered its workplace zone?**
+
+The original brief was deliberately focused: Android phones, one administrator, employee IDs and PINs, an office location, automatic check-in, working statistics and CSV export. The aim was to make the employee's arrival the start of the workflow, instead of requiring another attendance action.
+
+Then came the question that expanded the product: **what happens when someone goes directly to a factory or client site and never visits the office that day?** Office-only attendance would miss that authorised work. Geo Attend grew into employee-specific field assignments, multiple destinations and calendar-controlled date ranges.
+
+Real use shaped the next steps. Connection interruptions led to saved offline evidence; confusing exports led to readable IST dates and AM/PM times; repeated sync and tracking problems led to the v3.9 recovery work.
+
+This is the origin of **this project**. GPS attendance itself is an established approach; Geo Attend's contribution is applying it to this office's workflow and improving it through feedback.
+
+## Why choose GPS attendance?
+
+**Its strongest advantage is flexibility across locations.** An admin can authorise a destination for a particular employee and day without installing an attendance terminal at that destination. Automatic location checks can also reduce forgotten manual check-ins.
+
+That makes Geo Attend a useful fit for a small, mobile team with compatible Android phones and acceptable location coverage. The following comparison is an engineering assessment of typical implementations, informed by the technical references below. It is not a measured head-to-head study of commercial products.
+
+| Method | Where it works well | Where Geo Attend can help | Where the other method can be better |
+| --- | --- | --- | --- |
+| Paper register / manual spreadsheet | Simple setups, human oversight, no charged phone required | Automatically captures eligible location-based events and prepares structured records, reducing manual entry and transcription | A supervised register remains usable when phones, permissions or location services are unavailable |
+| RFID / NFC card reader | A fixed entrance with a deliberate tap and access-control integration | Avoids needing a reader at every temporary field destination; uses the employee's existing phone | A maintained reader can provide a clear entrance event indoors without relying on satellite reception or employee phone battery |
+| Fingerprint / face terminal | Matching the person presenting at an entrance against an enrolled biometric | Avoids collecting fingerprint or face templates for attendance and supports changing field destinations | A suitably secured biometric deployment can provide stronger evidence of who presented than the location of a phone alone |
+| QR check-in | Low-hardware-cost, deliberate attendance actions | Can remove the need to find and scan a code at every arrival; supports assigned geographic zones | QR can suit indoor venues or teams that prefer an explicit action; rotating codes and identity checks can address weaknesses of static codes |
+| GPS / fused-location attendance | Teams moving between authorised office and field zones | This is Geo Attend's focus: scheduled destinations, automatic checks, local evidence and reconciled reporting | Performance depends on phone settings, power, signal conditions and the acceptable attendance radius |
+
+These categories are not mutually exclusive. Card systems can use extra identity checks, QR systems can add location validation, and biometric systems can also be mobile. Compare the actual deployment rather than the label.
+
+### What the research supports
+
+**Location is an estimate.** GPS.gov explains that buildings, indoor use and reflected signals can reduce positioning accuracy.[^gps-accuracy] Android also documents geofence responsiveness, network dependencies and radius considerations.[^android-geofence] Geo Attend therefore separates its larger approach geofence from its configured attendance zone and requires location verification before awarding attendance.
+
+**Convenience has a power cost.** Android identifies accuracy, update frequency and delivery latency as battery-use factors.[^android-power] Geo Attend requests 90-second fixes in both attendance states and uses a separate routine sync lane. There is no measured battery-saving percentage for Geo Attend across phone brands yet.
+
+**Identity and location answer different questions.** Biometrics can help establish who presented, although matching is probabilistic and needs protection against presentation attacks; NIST discusses both limitations in its digital-authentication guidance.[^nist-biometrics] That guidance is technical context, not a certification of Geo Attend or a benchmark of attendance terminals. Geo Attend's phone approval and signed requests protect account/device access, but do not prove the employee is carrying the phone at every moment. Leaving a phone on site remains a limitation.
+
+### Where Geo Attend has the practical edge
+
+- **A changing workplace:** assign a new authorised site through the calendar instead of deploying another fixed reader.
+- **Fewer routine actions:** automatic attendance can reduce dependence on employees remembering to tap or scan.
+- **A connected record:** office and field sessions appear in the same history and CSV.
+- **Recovery after a network interruption:** saved evidence can be reconciled when the connection returns, subject to validation and recovery limits.
+- **No dedicated attendance terminal required:** existing compatible phones can serve as the collection devices. Hosting, search services, mobile data and maintenance still have costs or quotas.
+
+For a single indoor doorway where strong identity assurance is the priority, a secure terminal may be the better choice. For authorised movement between office and field sites, Geo Attend offers a more adaptable workflow. Location attendance records presence evidence; it does not measure work quality or productivity.
+
+Location information is sensitive too. Avoiding biometric templates does not make location tracking automatically more private. Explain tracking to employees, use schedules appropriately and restrict access to attendance data.
+
+[^gps-accuracy]: GPS.gov, [GPS Accuracy](https://www.gps.gov/gps-accuracy). Describes open-sky versus obstructed and indoor positioning conditions.
+[^android-geofence]: Android Developers, [Create and monitor geofences](https://developer.android.com/develop/sensors-and-location/location/geofencing). Documents radius, responsiveness and location/network constraints.
+[^android-power]: Android Developers, [About background location and battery life](https://developer.android.com/develop/sensors-and-location/location/battery). Explains accuracy, frequency and latency trade-offs.
+[^nist-biometrics]: NIST SP 800-63B-4, [Authenticators — Use of Biometrics](https://pages.nist.gov/800-63-4/sp800-63b/authenticators/#use-of-biometrics). Discusses probabilistic matching, presentation attacks and biometric privacy.
+
 ## One workplace. Two focused experiences.
 
 | For the administrator | For the employee |
