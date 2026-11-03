@@ -20,6 +20,18 @@ A working day can begin at the office, continue at a factory and end at a client
 
 **Introducing v3.9:** a release focused on continuity—keeping saved evidence visible, helping valid records sync, and aligning checkout with the last verified inside location.
 
+## Geo Attend, at a glance
+
+![Ten server suites, two Android simulations and three release checks](docs/images/geo-attend-validation.svg)
+
+**90 seconds** · Requested location interval, checked in and checked out.  
+**120 seconds** · Routine server/history sync interval.  
+**50–150 metres** · Configurable attendance zone for office and field sites.  
+**2 roles** · An admin experience and an employee experience.  
+**30 days** · Removed-employee attendance retention before live-database cleanup.
+
+Intervals are requested targets; Android can delay delivery. Validation figures describe recorded test groups, not measured real-world accuracy or battery savings.
+
 *The graphics in this README are product illustrations and validation summaries; they are not app screenshots.*
 
 ## Where the idea began
@@ -40,6 +52,19 @@ This is the origin of **this project**. GPS attendance itself is an established 
 
 That makes Geo Attend a useful fit for a small, mobile team with compatible Android phones and acceptable location coverage. The following comparison is an engineering assessment of typical implementations, informed by the technical references below. It is not a measured head-to-head study of commercial products.
 
+### Four alternatives. Different strengths.
+
+- **Manual registers:** simple and usable without a charged phone; more human recording work.
+- **Cards:** a clear tap at a fixed entrance; temporary field sites may need additional readers.
+- **Biometrics:** stronger evidence of who presented with suitable safeguards; enrolment and biometric-data handling are required.
+- **QR:** an inexpensive, deliberate scan; dynamic codes and identity checks can improve security.
+
+**Geo Attend's fit:** automatic location-based attendance across authorised office and field destinations. It verifies a phone's location and still depends on signal, settings and battery.
+
+<details>
+<summary><b>Explore the full attendance-method comparison</b></summary>
+
+
 | Method | Where it works well | Where Geo Attend can help | Where the other method can be better |
 | --- | --- | --- | --- |
 | Paper register / manual spreadsheet | Simple setups, human oversight, no charged phone required | Automatically captures eligible location-based events and prepares structured records, reducing manual entry and transcription | A supervised register remains usable when phones, permissions or location services are unavailable |
@@ -47,6 +72,8 @@ That makes Geo Attend a useful fit for a small, mobile team with compatible Andr
 | Fingerprint / face terminal | Matching the person presenting at an entrance against an enrolled biometric | Avoids collecting fingerprint or face templates for attendance and supports changing field destinations | A suitably secured biometric deployment can provide stronger evidence of who presented than the location of a phone alone |
 | QR check-in | Low-hardware-cost, deliberate attendance actions | Can remove the need to find and scan a code at every arrival; supports assigned geographic zones | QR can suit indoor venues or teams that prefer an explicit action; rotating codes and identity checks can address weaknesses of static codes |
 | GPS / fused-location attendance | Teams moving between authorised office and field zones | This is Geo Attend's focus: scheduled destinations, automatic checks, local evidence and reconciled reporting | Performance depends on phone settings, power, signal conditions and the acceptable attendance radius |
+
+</details>
 
 These categories are not mutually exclusive. Card systems can use extra identity checks, QR systems can add location validation, and biometric systems can also be mobile. Compare the actual deployment rather than the label.
 
@@ -77,6 +104,18 @@ Location information is sensitive too. Avoiding biometric templates does not mak
 
 ## One workplace. Two focused experiences.
 
+### Admin: see the team. Shape the working day.
+
+Team hours and check-ins, employee search, phone approval, work schedules, field assignments, CSV, graphs and silent alerts.
+
+### Employee: arrive. Stay informed.
+
+Own hours and history, live location status, assigned destinations, offline evidence, profile, controls and app updates.
+
+<details>
+<summary><b>See every admin and employee feature</b></summary>
+
+
 | For the administrator | For the employee |
 | --- | --- |
 | Team check-in count, recorded hours and recent attendance | Own attendance, recorded hours and recent history |
@@ -87,6 +126,8 @@ Location information is sensitive too. Avoiding biometric templates does not mak
 | Day, Month and Year attendance filters | Pending offline evidence and sync status |
 | On-demand recorded-hours graphs and CSV export | Controls, appearance and optional profile image |
 | Silent employee check-in and checkout notifications | Private in-app update checks |
+
+</details>
 
 CSV export, team graphs and schedule editing stay with the admin. Employees have no graphs or export access.
 
@@ -123,6 +164,22 @@ Attendance history separates arrival, confirmed departure, last verified time an
 
 ## The v3.9 difference
 
+### Saved evidence gets another chance.
+
+Recovery can upload after reconnection without waiting for checkout. A rejected record stays available for review while valid records continue syncing.
+
+### One consistent checkout rule.
+
+Online and offline attendance end at the last verified inside fix. Older delayed fixes cannot reopen a newer closed session.
+
+### Continuity across changing locations.
+
+Office history and safer geofence registration help preserve authorised evidence when destinations change.
+
+<details>
+<summary><b>Read the complete v3.9 fix breakdown</b></summary>
+
+
 | What needed attention | What v3.9 changes |
 | --- | --- |
 | Local evidence could remain buffered after reconnection | Retains a continuity anchor and uploads evidenced outage intervals without waiting for checkout |
@@ -133,6 +190,8 @@ Attendance history separates arrival, confirmed departure, last verified time an
 | Recovery could split a continuous same-site session | Extends continuous verified coverage without false exit/entry notifications |
 | Office changes could invalidate legitimate saved evidence | Retains authorised office-location versions for later recovery |
 | Geofence registration could race with replacement or stopping | Orders removal and replacement and guards stale registration callbacks |
+
+</details>
 
 **GPS requests remain at 90 seconds in both attendance states.** The routine server/history lane remains at **120 seconds**, with state-change updates able to happen sooner. Android controls actual delivery timing, so these are requested intervals.
 
@@ -150,6 +209,12 @@ There is no Google or Facebook sign-in.
 
 ![Geo Attend evolution from 2.3 through 3.9](docs/images/geo-attend-evolution.svg)
 
+**From office check-in to field-work continuity.** The timeline above shows six key milestones; the complete release story is available below.
+
+<details>
+<summary><b>Explore every release from v2.3 to v3.9</b></summary>
+
+
 | Release | The step forward |
 | --- | --- |
 | **2.3** | Private Android office attendance connected to Cloudflare |
@@ -166,15 +231,25 @@ There is no Google or Facebook sign-in.
 | **3.8.1–3.8.2** | Follow-up UI work, independent period controls, separate Employees section, compact scrolling ambient and theme simplification |
 | **3.9 — Latest** | Location continuity, independent sync outcomes, consistent checkout and geofence lifecycle fixes |
 
+</details>
+
 [Browse the releases](https://github.com/radt9098-byte/geo-attend-v2.3/releases) · [v3.8 field-work release](https://github.com/radt9098-byte/geo-attend-v2.3/releases/tag/v3.8) · [v3.9 reliability release](https://github.com/radt9098-byte/geo-attend-v2.3/releases/tag/v3.9)
 
 ## Tested with evidence
 
-![Ten server suites, two Android simulations and three release checks](docs/images/geo-attend-validation.svg)
+### 12 automated groups. An eight-hour virtual shift.
+
+**10 server suites + 2 Android core simulations**, with **3 release checks** covering the build, lint and signing certificate.
 
 The saved v3.9 validation records contain **12 automated groups: 10 server suites and 2 Android core simulations**, plus the Android release build, lint and signing-certificate checks.
 
 ### Ten server suites passed
+
+The ten suites cover **sync, security, backups, migration, notifications, tracking health, reliability, calendars, field work and the v3.9 location fixes**.
+
+<details>
+<summary><b>Inspect the ten server suites and their coverage</b></summary>
+
 
 | Suite | Coverage |
 | --- | --- |
@@ -188,6 +263,8 @@ The saved v3.9 validation records contain **12 automated groups: 10 server suite
 | Calendar | Sunday rules, selected employees, holidays, a two-hour slow-cadence shift and period CSV |
 | Field assignments | Employee access, direct field arrival, overlapping sites, expiry and cancellation |
 | v3.9 location | Ordered fixes, mixed sync outcomes, matching cutoffs, continuous recovery and office history |
+
+</details>
 
 ### Two Android core simulations passed
 
@@ -226,6 +303,12 @@ An online phone is not automatically checked in. A disconnected phone is not pro
 
 ## Private by design
 
+**Cloudflare D1** holds synced attendance and office records. **Protected phone storage** keeps pending evidence, sessions and local profile images. **Firebase Messaging** delivers alerts.
+
+<details>
+<summary><b>See exactly where each kind of data is stored</b></summary>
+
+
 | Information | Where it lives |
 | --- | --- |
 | Accounts, office, schedules, field assignments and synced attendance | Office Cloudflare D1 database, accessed through its Worker |
@@ -233,6 +316,8 @@ An online phone is not automatically checked in. A disconnected phone is not pro
 | Optional profile photo | Encrypted local storage on that phone |
 | Notification registration and delivery | Cloudflare service and Firebase Cloud Messaging |
 | Exported CSV and encrypted manual backups | The location chosen by the admin |
+
+</details>
 
 Firebase Messaging delivers alerts; attendance remains in D1. Active employee attendance has no automatic age-based deletion in this implementation. Removed employee records remain for **30 days**, then scheduled cleanup deletes them from the live database; exported copies remain separate.
 
